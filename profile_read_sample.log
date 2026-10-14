@@ -1,0 +1,1442 @@
+
+:com_initializeConnection SUCCEEDED 0
+================ Association view: 75 objects ================
+  #    IC   Class             OBIS                   Description
+  1    8    Clock             0.0.1.0.0.255          Clock
+  2    15   AssociationLN     0.0.40.0.0.255         Current Association
+  3    15   AssociationLN     0.0.40.0.1.255         Association PC
+  4    15   AssociationLN     0.0.40.0.2.255         Association MR
+  5    17   SapAssignment     0.0.41.0.0.255         
+  6    1    Data              0.0.42.0.0.255         Logical Device Name
+  7    23   HdlcSetup         0.0.22.0.0.255         HDLC Setup
+  8    1    Data              0.0.96.1.0.255         Meter Serial Number
+  9    1    Data              0.0.96.1.1.255         Manufacturer Name
+  10   1    Data              1.0.0.2.0.255          Firmware Version
+  11   1    Data              0.0.96.1.3.255         Hardware Version
+  12   1    Data              1.0.0.4.2.255          Active Meter Constant
+  13   1    Data              1.0.0.4.3.255          Reactive Meter Constant
+  14   1    Data              0.0.96.1.4.255         Year of Manufacture
+  15   1    Data              0.0.94.91.11.255       Meter Category
+  16   1    Data              0.0.94.91.12.255       Current Rating
+  17   1    Data              1.0.0.8.0.255          Demand Integration Period
+  18   1    Data              1.0.0.8.4.255          Profile Capture Period
+  19   1    Data              1.0.0.8.5.255          Daily Profile Period
+  20   20   ActivityCalendar  0.0.13.0.0.255         Activity Calendar
+  21   22   ActionSchedule    0.0.15.0.0.255         Single Action Schedule
+  22   3    Register          1.0.31.7.0.255         Current L1
+  23   3    Register          1.0.51.7.0.255         Current L2
+  24   3    Register          1.0.71.7.0.255         Current L3
+  25   3    Register          1.0.32.7.0.255         Voltage L1
+  26   3    Register          1.0.52.7.0.255         Voltage L2
+  27   3    Register          1.0.72.7.0.255         Voltage L3
+  28   3    Register          1.0.33.7.0.255         Power Factor L1
+  29   3    Register          1.0.53.7.0.255         Power Factor L2
+  30   3    Register          1.0.73.7.0.255         Power Factor L3
+  31   3    Register          1.0.13.7.0.255         Power Factor
+  32   3    Register          1.0.14.7.0.255         Frequency
+  33   3    Register          1.0.1.7.0.255          Active Power
+  34   3    Register          1.0.3.7.0.255          Reactive Power
+  35   3    Register          1.0.9.7.0.255          Apparent Power
+  36   1    Data              0.0.96.7.0.255         Power Failure Count
+  37   1    Data              0.0.94.91.0.255        Tamper Count
+  38   1    Data              0.0.0.1.0.255          Billing Count
+  39   1    Data              0.0.96.2.0.255         Programming Count
+  40   3    Register          0.0.0.1.2.255          Billing Date
+  41   7    ProfileGeneric    1.0.94.91.0.255        Instantaneous Profile
+  42   7    ProfileGeneric    1.0.94.91.3.255        Scalers: Instantaneous
+  43   7    ProfileGeneric    1.0.99.1.0.255         Block Load Profile
+  44   7    ProfileGeneric    1.0.94.91.4.255        Scalers: Block Load
+  45   7    ProfileGeneric    1.0.98.1.0.255         Billing Profile
+  46   4    ExtRegister       0.0.96.11.0.255        Event Code: Voltage
+  47   4    ExtRegister       0.0.96.11.1.255        Event Code: Current
+  48   4    ExtRegister       0.0.96.11.2.255        Event Code: Power
+  49   4    ExtRegister       0.0.96.11.3.255        Event Code: Transaction
+  50   4    ExtRegister       0.0.96.11.4.255        Event Code: Other
+  51   4    ExtRegister       0.0.96.11.5.255        Event Code: Non-roll
+  52   7    ProfileGeneric    0.0.99.98.0.255        Event Log: Voltage
+  53   7    ProfileGeneric    0.0.99.98.1.255        Event Log: Current
+  54   7    ProfileGeneric    0.0.99.98.2.255        Event Log: Power
+  55   7    ProfileGeneric    0.0.99.98.3.255        Event Log: Transaction
+  56   7    ProfileGeneric    0.0.99.98.4.255        Event Log: Other
+  57   7    ProfileGeneric    0.0.99.98.5.255        Event Log: Non-roll
+  58   7    ProfileGeneric    1.0.94.91.7.255        Scalers: Events
+  59   7    ProfileGeneric    1.0.94.91.6.255        Scalers: Billing
+  60   1    Data              0.0.94.91.9.255        Meter Type
+  61   7    ProfileGeneric    1.0.99.2.0.255         Daily Load Profile
+  62   7    ProfileGeneric    1.0.94.91.5.255        Scalers: Daily Load
+  63   3    Register          1.0.1.8.0.255          Active Energy Import
+  64   3    Register          1.0.5.8.0.255          Reactive Energy Lag
+  65   3    Register          1.0.8.8.0.255          Reactive Energy Lead
+  66   3    Register          1.0.9.8.0.255          Apparent Energy Import
+  67   3    Register          0.0.94.91.8.255        Power-off Duration
+  68   1    Data              0.0.0.1.1.255          Available Billing Periods
+  69   1    Data              0.0.96.52.0.255        
+  70   1    Data              0.0.96.53.0.255        
+  71   1    Data              0.0.96.55.0.255        
+  72   1    Data              0.0.96.56.0.255        
+  73   4    ExtRegister       1.0.1.6.0.255          MD kW
+  74   4    ExtRegister       1.0.9.6.0.255          MD kVA
+  75   7    ProfileGeneric    0.0.94.91.10.255       Name Plate Profile
+==============================================================
+
+---------------------- Meter readings ----------------------
+  0.0.1.0.0.255          Clock                      : 2026-10-14 10:55:59
+  0.0.42.0.0.255         Logical Device Name        : AMETRITON_CT1
+  0.0.96.1.0.255         Meter Serial Number        : 9120944
+  0.0.96.1.1.255         Manufacturer Name          : Avon Meters Pvt. Ltd.
+  1.0.0.2.0.255          Firmware Version           : ADMS3.0
+  0.0.96.1.3.255         Hardware Version           : BB1.00
+  1.0.0.4.2.255          Active Meter Constant      : 25
+  1.0.0.4.3.255          Reactive Meter Constant    : 1
+  0.0.96.1.4.255         Year of Manufacture        : 2021
+  0.0.94.91.11.255       Meter Category             : C1
+  0.0.94.91.12.255       Current Rating             : 05-06A
+  1.0.0.8.0.255          Demand Integration Period  : 1800
+  1.0.0.8.4.255          Profile Capture Period     : 1800
+  1.0.0.8.5.255          Daily Profile Period       : 86400
+  1.0.31.7.0.255         Current L1                 : 0.000 A
+  1.0.51.7.0.255         Current L2                 : 0.650 A
+  1.0.71.7.0.255         Current L3                 : 0.650 A
+  1.0.32.7.0.255         Voltage L1                 : 238.670 V
+  1.0.52.7.0.255         Voltage L2                 : 238.710 V
+  1.0.72.7.0.255         Voltage L3                 : 239.620 V
+  1.0.33.7.0.255         Power Factor L1            : 1.000 
+  1.0.53.7.0.255         Power Factor L2            : 1.000 
+  1.0.73.7.0.255         Power Factor L3            : 1.000 
+  1.0.13.7.0.255         Power Factor               : 1.000 
+  1.0.14.7.0.255         Frequency                  : 50.000 Hz
+  1.0.1.7.0.255          Active Power               : 0.315 kW
+  1.0.3.7.0.255          Reactive Power             : 0.000 kvar
+  1.0.9.7.0.255          Apparent Power             : 0.315 kVA
+  0.0.96.7.0.255         Power Failure Count        : 251
+  0.0.94.91.0.255        Tamper Count               : 19
+  0.0.0.1.0.255          Billing Count              : 45
+  0.0.96.2.0.255         Programming Count          : 11
+  0.0.0.1.2.255          Billing Date               : 2026-10-01 00:00:00
+  0.0.96.11.0.255        Event Code: Voltage        : 8 
+  0.0.96.11.1.255        Event Code: Current        : 58 
+  0.0.96.11.2.255        Event Code: Power          : 102 
+  0.0.96.11.3.255        Event Code: Transaction    : 166 
+  0.0.96.11.4.255        Event Code: Other          : 206 
+  0.0.96.11.5.255        Event Code: Non-roll       : 0 
+  0.0.94.91.9.255        Meter Type                 : 3
+  1.0.1.8.0.255          Active Energy Import       : 23496.050 kWh
+  1.0.5.8.0.255          Reactive Energy Lag        : 12.600 kvarh
+  1.0.8.8.0.255          Reactive Energy Lead       : 5322.510 kvarh
+  1.0.9.8.0.255          Apparent Energy Import     : 24352.630 kVAh
+  0.0.94.91.8.255        Power-off Duration         : 1585511 min
+  0.0.0.1.1.255          Available Billing Periods  : 12
+  0.0.96.52.0.255                                   : 1
+  0.0.96.53.0.255                                   : 2
+  0.0.96.55.0.255                                   : 0
+  0.0.96.56.0.255                                   : 0
+  1.0.1.6.0.255          MD kW                      : 0.360 kW
+  1.0.9.6.0.255          MD kVA                     : 0.360 kVA
+------------------------------------------------------------
+
+====================== Profile generic ======================
+
+---------------- Instantaneous Profile (1.0.94.91.0.255) ----------------
+  Columns 58, capture period 1 s, entries 1 of 1
+  Reading range 2026-10-13 10:56:03 .. 2026-10-14 10:56:04
+  Buffer read in 402 ms
+  Rows read: 1
+  -- Entry 1 of 1 --
+    Clock                        : 2026-10-14 10:56:06 
+    Current L1                   : 0.000 A
+    Current L2                   : 0.650 A
+    Current L3                   : 0.650 A
+    Voltage L1                   : 238.460 V
+    Voltage L2                   : 238.500 V
+    Voltage L3                   : 239.400 V
+    Power Factor L1              : 1.000 
+    Power Factor L2              : 1.000 
+    Power Factor L3              : 1.000 
+    Power Factor                 : 1.000 
+    Frequency                    : 50.000 Hz
+    Apparent Power               : 0.313 kVA
+    Active Power                 : 0.313 kW
+    Reactive Power               : 0.000 kvar
+    Power Failure Count          : 251 
+    Power-off Duration           : 1585511 min
+    Tamper Count                 : 19 
+    Billing Count                : 45 
+    Programming Count            : 11 
+    Billing Date                 : 2026-10-01 00:00:00 
+    Active Energy Import         : 23496.050 kWh
+    Reactive Energy Lag          : 12.600 kvarh
+    Reactive Energy Lead         : 5322.510 kvarh
+    Apparent Energy Import       : 24352.630 kVAh
+    MD kW                        : 0.360 kW
+    MD kW time                   : 2026-10-02 12:00:00 
+    MD kVA                       : 0.360 kVA
+    MD kVA time                  : 2026-10-02 12:00:00 
+    Cumulative MD kW             : 193.260 kW
+    Cumulative MD kVA            : 202.820 kVA
+    1.0.0.140.22.255             : 1 
+    1.0.0.140.23.255             : 0 
+    1.0.0.140.24.255             : 0 
+    1.0.0.140.25.255             : 0 
+    1.0.0.140.26.255             : 2 
+    1.0.0.140.27.255             : 0 
+    1.0.0.140.38.255             : 6 
+    1.0.0.140.39.255             : 6 
+    1.0.0.140.40.255             : 1 
+    1.0.0.140.14.255             : 0 
+    1.0.0.140.15.255             : 0 
+    1.0.0.140.16.255             : 0 
+    1.0.0.140.34.255             : 2 
+    1.0.0.140.19.255             : 0 
+    1.0.0.140.18.255             : 0 
+    1.0.0.140.30.255             : 1 
+    1.0.0.140.33.255             : 0 
+    1.0.0.140.35.255             : 0 
+    1.0.96.5.1.255               : 0 
+    Active Power L1              : 0.000 kW
+    Active Power L2              : 0.157 kW
+    Active Power L3              : 0.156 kW
+    Reactive Power L1            : 0.000 kvar
+    Reactive Power L2            : 0.000 kvar
+    Reactive Power L3            : 0.000 kvar
+    0.0.94.91.1.255              : 0 
+    0.0.94.91.2.255              : 0 
+
+---------------- Block Load Profile (1.0.99.1.0.255) ----------------
+  Columns 12, capture period 1800 s, entries 2208 of 2208
+  Reading range 2026-10-13 10:56:03 .. 2026-10-14 11:26:03
+  Buffer read in 5908 ms
+  Rows read: 48
+    c1   Clock                        0.0.1.0.0.255        
+    c2   Avg Current L1               1.0.31.27.0.255      A
+    c3   Avg Current L2               1.0.51.27.0.255      A
+    c4   Avg Current L3               1.0.71.27.0.255      A
+    c5   Avg Voltage L1               1.0.32.27.0.255      V
+    c6   Avg Voltage L2               1.0.52.27.0.255      V
+    c7   Avg Voltage L3               1.0.72.27.0.255      V
+    c8   Block kWh                    1.0.1.29.0.255       kWh
+    c9   Block kvarh Lag              1.0.5.29.0.255       kvarh
+    c10  Block kvarh Lead             1.0.8.29.0.255       kvarh
+    c11  Block kVAh                   1.0.9.29.0.255       kVAh
+    c12  Avg Power Factor             1.0.13.27.0.255      
+  #    c1                  c2    c3    c4    c5    c6    c7    c8   c9   c10  c11  c12   
+  1    2026-10-13 11:00:00 0.000 0.000 0.000 0.000 0.000 0.000 0    0    0    0    1.000 
+  2    2026-10-13 11:30:00 0.000 0.000 0.000 0.000 0.000 0.000 0    0    0    0    1.000 
+  3    2026-10-13 12:00:00 0.000 0.000 0.000 0.000 0.000 0.000 0    0    0    0    1.000 
+  4    2026-10-13 12:30:00 0.000 0.000 0.000 0.000 0.000 0.000 0    0    0    0    1.000 
+  5    2026-10-13 13:00:00 0.000 0.000 0.000 0.000 0.000 0.000 0    0    0    0    1.000 
+  6    2026-10-13 13:30:00 0.000 0.000 0.000 0.000 0.000 0.000 0    0    0    0    1.000 
+  7    2026-10-13 14:00:00 0.000 0.000 0.000 0.000 0.000 0.000 0    0    0    0    1.000 
+  8    2026-10-13 14:30:00 0.000 0.000 0.000 0.000 0.000 0.000 0    0    0    0    1.000 
+  9    2026-10-13 15:00:00 0.000 0.000 0.000 0.000 0.000 0.000 0    0    0    0    1.000 
+  10   2026-10-13 15:30:00 0.000 0.000 0.000 0.000 0.000 0.000 0    0    0    0    1.000 
+  11   2026-10-13 16:00:00 0.000 0.000 0.000 0.000 0.000 0.000 0    0    0    0    1.000 
+  12   2026-10-13 16:30:00 0.000 0.000 0.000 0.000 0.000 0.000 0    0    0    0    1.000 
+  13   2026-10-13 17:00:00 0.000 0.000 0.000 0.000 0.000 0.000 0    0    0    0    1.000 
+  14   2026-10-13 17:30:00 0.000 0.000 0.000 0.000 0.000 0.000 0    0    0    0    1.000 
+  15   2026-10-13 18:00:00 0.000 0.000 0.000 0.000 0.000 0.000 0    0    0    0    1.000 
+  16   2026-10-13 18:30:00 0.000 0.000 0.000 0.000 0.000 0.000 0    0    0    0    1.000 
+  17   2026-10-13 19:00:00 0.000 0.000 0.000 0.000 0.000 0.000 0    0    0    0    1.000 
+  18   2026-10-13 19:30:00 0.000 0.000 0.000 0.000 0.000 0.000 0    0    0    0    1.000 
+  19   2026-10-13 20:00:00 0.000 0.000 0.000 0.000 0.000 0.000 0    0    0    0    1.000 
+  20   2026-10-13 20:30:00 0.000 0.000 0.000 0.000 0.000 0.000 0    0    0    0    1.000 
+  21   2026-10-13 21:00:00 0.000 0.000 0.000 0.000 0.000 0.000 0    0    0    0    1.000 
+  22   2026-10-13 21:30:00 0.000 0.000 0.000 0.000 0.000 0.000 0    0    0    0    1.000 
+  23   2026-10-13 22:00:00 0.000 0.000 0.000 0.000 0.000 0.000 0    0    0    0    1.000 
+  24   2026-10-13 22:30:00 0.000 0.000 0.000 237.070 237.090 238.020 0.010 0    0    0.010 1.000 
+  25   2026-10-13 23:00:00 0.000 0.000 0.000 240.960 240.990 241.910 0.150 0    0    0.150 1.000 
+  26   2026-10-13 23:30:00 0.000 0.000 0.000 242.050 242.080 243.010 0.100 0    0    0.100 1.000 
+  27   2026-10-14 00:00:00 0.000 0.000 0.000 0.000 0.000 0.000 0    0    0    0    1.000 
+  28   2026-10-14 00:30:00 0.000 0.000 0.000 0.000 0.000 0.000 0    0    0    0    1.000 
+  29   2026-10-14 01:00:00 0.000 0.000 0.000 0.000 0.000 0.000 0    0    0    0    1.000 
+  30   2026-10-14 01:30:00 0.000 0.000 0.000 0.000 0.000 0.000 0    0    0    0    1.000 
+  31   2026-10-14 02:00:00 0.000 0.000 0.000 0.000 0.000 0.000 0    0    0    0    1.000 
+  32   2026-10-14 02:30:00 0.000 0.000 0.000 0.000 0.000 0.000 0    0    0    0    1.000 
+  33   2026-10-14 03:00:00 0.000 0.000 0.000 0.000 0.000 0.000 0    0    0    0    1.000 
+  34   2026-10-14 03:30:00 0.000 0.000 0.000 0.000 0.000 0.000 0    0    0    0    1.000 
+  35   2026-10-14 04:00:00 0.000 0.000 0.000 0.000 0.000 0.000 0    0    0    0    1.000 
+  36   2026-10-14 04:30:00 0.000 0.000 0.000 0.000 0.000 0.000 0    0    0    0    1.000 
+  37   2026-10-14 05:00:00 0.000 0.000 0.000 0.000 0.000 0.000 0    0    0    0    1.000 
+  38   2026-10-14 05:30:00 0.000 0.000 0.000 0.000 0.000 0.000 0    0    0    0    1.000 
+  39   2026-10-14 06:00:00 0.000 0.000 0.000 0.000 0.000 0.000 0    0    0    0    1.000 
+  40   2026-10-14 06:30:00 0.000 0.000 0.000 0.000 0.000 0.000 0    0    0    0    1.000 
+  41   2026-10-14 07:00:00 0.000 0.000 0.000 0.000 0.000 0.000 0    0    0    0    1.000 
+  42   2026-10-14 07:30:00 0.000 0.000 0.000 0.000 0.000 0.000 0    0    0    0    1.000 
+  43   2026-10-14 08:00:00 0.000 0.000 0.000 0.000 0.000 0.000 0    0    0    0    1.000 
+  44   2026-10-14 08:30:00 0.000 0.000 0.000 0.000 0.000 0.000 0    0    0    0    1.000 
+  45   2026-10-14 09:00:00 0.000 0.000 0.000 0.000 0.000 0.000 0    0    0    0    1.000 
+  46   2026-10-14 09:30:00 0.000 0.000 0.000 245.340 245.370 246.330 0.050 0    0    0.050 1.000 
+  47   2026-10-14 10:00:00 0.000 0.000 0.000 242.450 242.490 243.420 0.160 0    0    0.160 1.000 
+  48   2026-10-14 10:30:00 0.000 0.000 0.000 240.570 240.610 241.520 0.160 0    0    0.160 1.000 
+
+---------------- Billing Profile (1.0.98.1.0.255) ----------------
+  Columns 75, capture period 0 s, entries 12 of 12
+  Buffer read in 9492 ms
+  Rows read: 13
+  -- Entry 1 of 13 --
+    Billing Date                 : 2025-03-01 00:00:00 
+    Billing Avg Power Factor     : 0.971 
+    Active Energy Import         : 23076.710 kWh
+    kWh TZ1                      : 1848.460 kWh
+    kWh TZ2                      : 3084.730 kWh
+    kWh TZ3                      : 7842.810 kWh
+    kWh TZ4                      : 6786.880 kWh
+    kWh TZ5                      : 2691.960 kWh
+    kWh TZ6                      : 821.870 kWh
+    kWh TZ7                      : 0 kWh
+    kWh TZ8                      : 0 kWh
+    Reactive Energy Lag          : 12.570 kvarh
+    Reactive Energy Lead         : 5322.510 kvarh
+    Apparent Energy Import       : 23933.260 kVAh
+    kVAh TZ1                     : 2047.260 kVAh
+    kVAh TZ2                     : 3218.870 kVAh
+    kVAh TZ3                     : 8005.320 kVAh
+    kVAh TZ4                     : 6953.910 kVAh
+    kVAh TZ5                     : 2827.180 kVAh
+    kVAh TZ6                     : 880.720 kVAh
+    kVAh TZ7                     : 0 kVAh
+    kVAh TZ8                     : 0 kVAh
+    MD kW                        : 4.260 kW
+    MD kW time                   : 2025-02-06 15:00:00 
+    MD kW TZ1                    : 0.340 kW
+    MD kW TZ1 time               : 2025-02-04 03:30:00 
+    MD kW TZ2                    : 4.240 kW
+    MD kW TZ2 time               : 2025-02-12 10:00:00 
+    MD kW TZ3                    : 4.240 kW
+    MD kW TZ3 time               : 2025-02-15 13:30:00 
+    MD kW TZ4                    : 4.260 kW
+    MD kW TZ4 time               : 2025-02-06 15:00:00 
+    MD kW TZ5                    : 2.800 kW
+    MD kW TZ5 time               : 2025-02-12 18:30:00 
+    MD kW TZ6                    : 0.640 kW
+    MD kW TZ6 time               : 2025-02-03 22:30:00 
+    MD kW TZ7                    : 0 kW
+    MD kW TZ7 time               : 2000-00-00 00:00:00 
+    MD kW TZ8                    : 0 kW
+    MD kW TZ8 time               : 2000-00-00 00:00:00 
+    MD kVA                       : 4.300 kVA
+    MD kVA time                  : 2025-02-06 15:00:00 
+    MD kVA TZ1                   : 0.360 kVA
+    MD kVA TZ1 time              : 2025-02-04 04:30:00 
+    MD kVA TZ2                   : 4.300 kVA
+    MD kVA TZ2 time              : 2025-02-12 10:00:00 
+    MD kVA TZ3                   : 4.260 kVA
+    MD kVA TZ3 time              : 2025-02-15 13:30:00 
+    MD kVA TZ4                   : 4.300 kVA
+    MD kVA TZ4 time              : 2025-02-06 15:00:00 
+    MD kVA TZ5                   : 2.860 kVA
+    MD kVA TZ5 time              : 2025-02-12 18:30:00 
+    MD kVA TZ6                   : 0.660 kVA
+    MD kVA TZ6 time              : 2025-02-03 22:30:00 
+    MD kVA TZ7                   : 0 kVA
+    MD kVA TZ7 time              : 2000-00-00 00:00:00 
+    MD kVA TZ8                   : 0 kVA
+    MD kVA TZ8 time              : 2000-00-00 00:00:00 
+    Billing Power-on Duration    : 20936 min
+    0.0.96.99.0.255              : 0 min
+    0.0.96.99.1.255              : 360 min
+    0.0.96.99.2.255              : 600 min
+    0.0.96.99.3.255              : 840 min
+    0.0.96.99.4.255              : 1080 min
+    0.0.96.99.5.255              : 1320 min
+    0.0.96.99.6.255              : 65535 min
+    0.0.96.99.7.255              : 65535 min
+    0.1.96.99.0.255              : 1 
+    0.1.96.99.1.255              : 2 
+    0.1.96.99.2.255              : 3 
+    0.1.96.99.3.255              : 4 
+    0.1.96.99.4.255              : 5 
+    0.1.96.99.5.255              : 6 
+    0.1.96.99.6.255              : 255 
+    0.1.96.99.7.255              : 255 
+  -- Entry 2 of 13 --
+    Billing Date                 : 2025-10-01 00:00:00 
+    Billing Avg Power Factor     : 1.000 
+    Active Energy Import         : 23076.710 kWh
+    kWh TZ1                      : 1848.460 kWh
+    kWh TZ2                      : 3084.730 kWh
+    kWh TZ3                      : 7842.810 kWh
+    kWh TZ4                      : 6786.880 kWh
+    kWh TZ5                      : 2691.960 kWh
+    kWh TZ6                      : 821.870 kWh
+    kWh TZ7                      : 0 kWh
+    kWh TZ8                      : 0 kWh
+    Reactive Energy Lag          : 12.570 kvarh
+    Reactive Energy Lead         : 5322.510 kvarh
+    Apparent Energy Import       : 23933.260 kVAh
+    kVAh TZ1                     : 2047.260 kVAh
+    kVAh TZ2                     : 3218.870 kVAh
+    kVAh TZ3                     : 8005.320 kVAh
+    kVAh TZ4                     : 6953.910 kVAh
+    kVAh TZ5                     : 2827.180 kVAh
+    kVAh TZ6                     : 880.720 kVAh
+    kVAh TZ7                     : 0 kVAh
+    kVAh TZ8                     : 0 kVAh
+    MD kW                        : 0 kW
+    MD kW time                   : 2000-00-00 00:00:00 
+    MD kW TZ1                    : 0 kW
+    MD kW TZ1 time               : 2000-00-00 00:00:00 
+    MD kW TZ2                    : 0 kW
+    MD kW TZ2 time               : 2000-00-00 00:00:00 
+    MD kW TZ3                    : 0 kW
+    MD kW TZ3 time               : 2000-00-00 00:00:00 
+    MD kW TZ4                    : 0 kW
+    MD kW TZ4 time               : 2000-00-00 00:00:00 
+    MD kW TZ5                    : 0 kW
+    MD kW TZ5 time               : 2000-00-00 00:00:00 
+    MD kW TZ6                    : 0 kW
+    MD kW TZ6 time               : 2000-00-00 00:00:00 
+    MD kW TZ7                    : 0 kW
+    MD kW TZ7 time               : 2000-00-00 00:00:00 
+    MD kW TZ8                    : 0 kW
+    MD kW TZ8 time               : 2000-00-00 00:00:00 
+    MD kVA                       : 0 kVA
+    MD kVA time                  : 2000-00-00 00:00:00 
+    MD kVA TZ1                   : 0 kVA
+    MD kVA TZ1 time              : 2000-00-00 00:00:00 
+    MD kVA TZ2                   : 0 kVA
+    MD kVA TZ2 time              : 2000-00-00 00:00:00 
+    MD kVA TZ3                   : 0 kVA
+    MD kVA TZ3 time              : 2000-00-00 00:00:00 
+    MD kVA TZ4                   : 0 kVA
+    MD kVA TZ4 time              : 2000-00-00 00:00:00 
+    MD kVA TZ5                   : 0 kVA
+    MD kVA TZ5 time              : 2000-00-00 00:00:00 
+    MD kVA TZ6                   : 0 kVA
+    MD kVA TZ6 time              : 2000-00-00 00:00:00 
+    MD kVA TZ7                   : 0 kVA
+    MD kVA TZ7 time              : 2000-00-00 00:00:00 
+    MD kVA TZ8                   : 0 kVA
+    MD kVA TZ8 time              : 2000-00-00 00:00:00 
+    Billing Power-on Duration    : 79 min
+    0.0.96.99.0.255              : 0 min
+    0.0.96.99.1.255              : 360 min
+    0.0.96.99.2.255              : 600 min
+    0.0.96.99.3.255              : 840 min
+    0.0.96.99.4.255              : 1080 min
+    0.0.96.99.5.255              : 1320 min
+    0.0.96.99.6.255              : 65535 min
+    0.0.96.99.7.255              : 65535 min
+    0.1.96.99.0.255              : 1 
+    0.1.96.99.1.255              : 2 
+    0.1.96.99.2.255              : 3 
+    0.1.96.99.3.255              : 4 
+    0.1.96.99.4.255              : 5 
+    0.1.96.99.5.255              : 6 
+    0.1.96.99.6.255              : 255 
+    0.1.96.99.7.255              : 255 
+  -- Entry 3 of 13 --
+    Billing Date                 : 2025-11-01 00:00:00 
+    Billing Avg Power Factor     : 1.000 
+    Active Energy Import         : 23076.710 kWh
+    kWh TZ1                      : 1848.460 kWh
+    kWh TZ2                      : 3084.730 kWh
+    kWh TZ3                      : 7842.810 kWh
+    kWh TZ4                      : 6786.880 kWh
+    kWh TZ5                      : 2691.960 kWh
+    kWh TZ6                      : 821.870 kWh
+    kWh TZ7                      : 0 kWh
+    kWh TZ8                      : 0 kWh
+    Reactive Energy Lag          : 12.570 kvarh
+    Reactive Energy Lead         : 5322.510 kvarh
+    Apparent Energy Import       : 23933.260 kVAh
+    kVAh TZ1                     : 2047.260 kVAh
+    kVAh TZ2                     : 3218.870 kVAh
+    kVAh TZ3                     : 8005.320 kVAh
+    kVAh TZ4                     : 6953.910 kVAh
+    kVAh TZ5                     : 2827.180 kVAh
+    kVAh TZ6                     : 880.720 kVAh
+    kVAh TZ7                     : 0 kVAh
+    kVAh TZ8                     : 0 kVAh
+    MD kW                        : 0 kW
+    MD kW time                   : 2000-00-00 00:00:00 
+    MD kW TZ1                    : 0 kW
+    MD kW TZ1 time               : 2000-00-00 00:00:00 
+    MD kW TZ2                    : 0 kW
+    MD kW TZ2 time               : 2000-00-00 00:00:00 
+    MD kW TZ3                    : 0 kW
+    MD kW TZ3 time               : 2000-00-00 00:00:00 
+    MD kW TZ4                    : 0 kW
+    MD kW TZ4 time               : 2000-00-00 00:00:00 
+    MD kW TZ5                    : 0 kW
+    MD kW TZ5 time               : 2000-00-00 00:00:00 
+    MD kW TZ6                    : 0 kW
+    MD kW TZ6 time               : 2000-00-00 00:00:00 
+    MD kW TZ7                    : 0 kW
+    MD kW TZ7 time               : 2000-00-00 00:00:00 
+    MD kW TZ8                    : 0 kW
+    MD kW TZ8 time               : 2000-00-00 00:00:00 
+    MD kVA                       : 0 kVA
+    MD kVA time                  : 2000-00-00 00:00:00 
+    MD kVA TZ1                   : 0 kVA
+    MD kVA TZ1 time              : 2000-00-00 00:00:00 
+    MD kVA TZ2                   : 0 kVA
+    MD kVA TZ2 time              : 2000-00-00 00:00:00 
+    MD kVA TZ3                   : 0 kVA
+    MD kVA TZ3 time              : 2000-00-00 00:00:00 
+    MD kVA TZ4                   : 0 kVA
+    MD kVA TZ4 time              : 2000-00-00 00:00:00 
+    MD kVA TZ5                   : 0 kVA
+    MD kVA TZ5 time              : 2000-00-00 00:00:00 
+    MD kVA TZ6                   : 0 kVA
+    MD kVA TZ6 time              : 2000-00-00 00:00:00 
+    MD kVA TZ7                   : 0 kVA
+    MD kVA TZ7 time              : 2000-00-00 00:00:00 
+    MD kVA TZ8                   : 0 kVA
+    MD kVA TZ8 time              : 2000-00-00 00:00:00 
+    Billing Power-on Duration    : 0 min
+    0.0.96.99.0.255              : 0 min
+    0.0.96.99.1.255              : 360 min
+    0.0.96.99.2.255              : 600 min
+    0.0.96.99.3.255              : 840 min
+    0.0.96.99.4.255              : 1080 min
+    0.0.96.99.5.255              : 1320 min
+    0.0.96.99.6.255              : 65535 min
+    0.0.96.99.7.255              : 65535 min
+    0.1.96.99.0.255              : 1 
+    0.1.96.99.1.255              : 2 
+    0.1.96.99.2.255              : 3 
+    0.1.96.99.3.255              : 4 
+    0.1.96.99.4.255              : 5 
+    0.1.96.99.5.255              : 6 
+    0.1.96.99.6.255              : 255 
+    0.1.96.99.7.255              : 255 
+  -- Entry 4 of 13 --
+    Billing Date                 : 2026-02-01 00:00:00 
+    Billing Avg Power Factor     : 1.000 
+    Active Energy Import         : 23076.710 kWh
+    kWh TZ1                      : 1848.460 kWh
+    kWh TZ2                      : 3084.730 kWh
+    kWh TZ3                      : 7842.810 kWh
+    kWh TZ4                      : 6786.880 kWh
+    kWh TZ5                      : 2691.960 kWh
+    kWh TZ6                      : 821.870 kWh
+    kWh TZ7                      : 0 kWh
+    kWh TZ8                      : 0 kWh
+    Reactive Energy Lag          : 12.570 kvarh
+    Reactive Energy Lead         : 5322.510 kvarh
+    Apparent Energy Import       : 23933.260 kVAh
+    kVAh TZ1                     : 2047.260 kVAh
+    kVAh TZ2                     : 3218.870 kVAh
+    kVAh TZ3                     : 8005.320 kVAh
+    kVAh TZ4                     : 6953.910 kVAh
+    kVAh TZ5                     : 2827.180 kVAh
+    kVAh TZ6                     : 880.720 kVAh
+    kVAh TZ7                     : 0 kVAh
+    kVAh TZ8                     : 0 kVAh
+    MD kW                        : 0 kW
+    MD kW time                   : 2000-00-00 00:00:00 
+    MD kW TZ1                    : 0 kW
+    MD kW TZ1 time               : 2000-00-00 00:00:00 
+    MD kW TZ2                    : 0 kW
+    MD kW TZ2 time               : 2000-00-00 00:00:00 
+    MD kW TZ3                    : 0 kW
+    MD kW TZ3 time               : 2000-00-00 00:00:00 
+    MD kW TZ4                    : 0 kW
+    MD kW TZ4 time               : 2000-00-00 00:00:00 
+    MD kW TZ5                    : 0 kW
+    MD kW TZ5 time               : 2000-00-00 00:00:00 
+    MD kW TZ6                    : 0 kW
+    MD kW TZ6 time               : 2000-00-00 00:00:00 
+    MD kW TZ7                    : 0 kW
+    MD kW TZ7 time               : 2000-00-00 00:00:00 
+    MD kW TZ8                    : 0 kW
+    MD kW TZ8 time               : 2000-00-00 00:00:00 
+    MD kVA                       : 0 kVA
+    MD kVA time                  : 2000-00-00 00:00:00 
+    MD kVA TZ1                   : 0 kVA
+    MD kVA TZ1 time              : 2000-00-00 00:00:00 
+    MD kVA TZ2                   : 0 kVA
+    MD kVA TZ2 time              : 2000-00-00 00:00:00 
+    MD kVA TZ3                   : 0 kVA
+    MD kVA TZ3 time              : 2000-00-00 00:00:00 
+    MD kVA TZ4                   : 0 kVA
+    MD kVA TZ4 time              : 2000-00-00 00:00:00 
+    MD kVA TZ5                   : 0 kVA
+    MD kVA TZ5 time              : 2000-00-00 00:00:00 
+    MD kVA TZ6                   : 0 kVA
+    MD kVA TZ6 time              : 2000-00-00 00:00:00 
+    MD kVA TZ7                   : 0 kVA
+    MD kVA TZ7 time              : 2000-00-00 00:00:00 
+    MD kVA TZ8                   : 0 kVA
+    MD kVA TZ8 time              : 2000-00-00 00:00:00 
+    Billing Power-on Duration    : 108 min
+    0.0.96.99.0.255              : 0 min
+    0.0.96.99.1.255              : 360 min
+    0.0.96.99.2.255              : 600 min
+    0.0.96.99.3.255              : 840 min
+    0.0.96.99.4.255              : 1080 min
+    0.0.96.99.5.255              : 1320 min
+    0.0.96.99.6.255              : 65535 min
+    0.0.96.99.7.255              : 65535 min
+    0.1.96.99.0.255              : 1 
+    0.1.96.99.1.255              : 2 
+    0.1.96.99.2.255              : 3 
+    0.1.96.99.3.255              : 4 
+    0.1.96.99.4.255              : 5 
+    0.1.96.99.5.255              : 6 
+    0.1.96.99.6.255              : 255 
+    0.1.96.99.7.255              : 255 
+  -- Entry 5 of 13 --
+    Billing Date                 : 2026-03-01 00:00:00 
+    Billing Avg Power Factor     : 1.000 
+    Active Energy Import         : 23076.710 kWh
+    kWh TZ1                      : 1848.460 kWh
+    kWh TZ2                      : 3084.730 kWh
+    kWh TZ3                      : 7842.810 kWh
+    kWh TZ4                      : 6786.880 kWh
+    kWh TZ5                      : 2691.960 kWh
+    kWh TZ6                      : 821.870 kWh
+    kWh TZ7                      : 0 kWh
+    kWh TZ8                      : 0 kWh
+    Reactive Energy Lag          : 12.570 kvarh
+    Reactive Energy Lead         : 5322.510 kvarh
+    Apparent Energy Import       : 23933.260 kVAh
+    kVAh TZ1                     : 2047.260 kVAh
+    kVAh TZ2                     : 3218.870 kVAh
+    kVAh TZ3                     : 8005.320 kVAh
+    kVAh TZ4                     : 6953.910 kVAh
+    kVAh TZ5                     : 2827.180 kVAh
+    kVAh TZ6                     : 880.720 kVAh
+    kVAh TZ7                     : 0 kVAh
+    kVAh TZ8                     : 0 kVAh
+    MD kW                        : 0 kW
+    MD kW time                   : 2000-00-00 00:00:00 
+    MD kW TZ1                    : 0 kW
+    MD kW TZ1 time               : 2000-00-00 00:00:00 
+    MD kW TZ2                    : 0 kW
+    MD kW TZ2 time               : 2000-00-00 00:00:00 
+    MD kW TZ3                    : 0 kW
+    MD kW TZ3 time               : 2000-00-00 00:00:00 
+    MD kW TZ4                    : 0 kW
+    MD kW TZ4 time               : 2000-00-00 00:00:00 
+    MD kW TZ5                    : 0 kW
+    MD kW TZ5 time               : 2000-00-00 00:00:00 
+    MD kW TZ6                    : 0 kW
+    MD kW TZ6 time               : 2000-00-00 00:00:00 
+    MD kW TZ7                    : 0 kW
+    MD kW TZ7 time               : 2000-00-00 00:00:00 
+    MD kW TZ8                    : 0 kW
+    MD kW TZ8 time               : 2000-00-00 00:00:00 
+    MD kVA                       : 0 kVA
+    MD kVA time                  : 2000-00-00 00:00:00 
+    MD kVA TZ1                   : 0 kVA
+    MD kVA TZ1 time              : 2000-00-00 00:00:00 
+    MD kVA TZ2                   : 0 kVA
+    MD kVA TZ2 time              : 2000-00-00 00:00:00 
+    MD kVA TZ3                   : 0 kVA
+    MD kVA TZ3 time              : 2000-00-00 00:00:00 
+    MD kVA TZ4                   : 0 kVA
+    MD kVA TZ4 time              : 2000-00-00 00:00:00 
+    MD kVA TZ5                   : 0 kVA
+    MD kVA TZ5 time              : 2000-00-00 00:00:00 
+    MD kVA TZ6                   : 0 kVA
+    MD kVA TZ6 time              : 2000-00-00 00:00:00 
+    MD kVA TZ7                   : 0 kVA
+    MD kVA TZ7 time              : 2000-00-00 00:00:00 
+    MD kVA TZ8                   : 0 kVA
+    MD kVA TZ8 time              : 2000-00-00 00:00:00 
+    Billing Power-on Duration    : 206 min
+    0.0.96.99.0.255              : 0 min
+    0.0.96.99.1.255              : 360 min
+    0.0.96.99.2.255              : 600 min
+    0.0.96.99.3.255              : 840 min
+    0.0.96.99.4.255              : 1080 min
+    0.0.96.99.5.255              : 1320 min
+    0.0.96.99.6.255              : 65535 min
+    0.0.96.99.7.255              : 65535 min
+    0.1.96.99.0.255              : 1 
+    0.1.96.99.1.255              : 2 
+    0.1.96.99.2.255              : 3 
+    0.1.96.99.3.255              : 4 
+    0.1.96.99.4.255              : 5 
+    0.1.96.99.5.255              : 6 
+    0.1.96.99.6.255              : 255 
+    0.1.96.99.7.255              : 255 
+  -- Entry 6 of 13 --
+    Billing Date                 : 2026-04-01 00:00:00 
+    Billing Avg Power Factor     : 1.000 
+    Active Energy Import         : 23230.410 kWh
+    kWh TZ1                      : 1885.960 kWh
+    kWh TZ2                      : 3106.500 kWh
+    kWh TZ3                      : 7867.090 kWh
+    kWh TZ4                      : 6817.600 kWh
+    kWh TZ5                      : 2718.800 kWh
+    kWh TZ6                      : 834.500 kWh
+    kWh TZ7                      : 0 kWh
+    kWh TZ8                      : 0 kWh
+    Reactive Energy Lag          : 12.580 kvarh
+    Reactive Energy Lead         : 5322.510 kvarh
+    Apparent Energy Import       : 24086.960 kVAh
+    kVAh TZ1                     : 2084.760 kVAh
+    kVAh TZ2                     : 3240.640 kVAh
+    kVAh TZ3                     : 8029.600 kVAh
+    kVAh TZ4                     : 6984.630 kVAh
+    kVAh TZ5                     : 2854.020 kVAh
+    kVAh TZ6                     : 893.350 kVAh
+    kVAh TZ7                     : 0 kVAh
+    kVAh TZ8                     : 0 kVAh
+    MD kW                        : 1.880 kW
+    MD kW time                   : 2026-03-09 13:30:00 
+    MD kW TZ1                    : 0.600 kW
+    MD kW TZ1 time               : 2026-03-19 01:30:00 
+    MD kW TZ2                    : 0.560 kW
+    MD kW TZ2 time               : 2026-03-19 06:30:00 
+    MD kW TZ3                    : 1.880 kW
+    MD kW TZ3 time               : 2026-03-09 13:30:00 
+    MD kW TZ4                    : 0.580 kW
+    MD kW TZ4 time               : 2026-03-10 18:00:00 
+    MD kW TZ5                    : 0.580 kW
+    MD kW TZ5 time               : 2026-03-09 20:30:00 
+    MD kW TZ6                    : 0.600 kW
+    MD kW TZ6 time               : 2026-03-11 00:00:00 
+    MD kW TZ7                    : 0 kW
+    MD kW TZ7 time               : 2000-00-00 00:00:00 
+    MD kW TZ8                    : 0 kW
+    MD kW TZ8 time               : 2000-00-00 00:00:00 
+    MD kVA                       : 1.880 kVA
+    MD kVA time                  : 2026-03-09 13:30:00 
+    MD kVA TZ1                   : 0.600 kVA
+    MD kVA TZ1 time              : 2026-03-19 01:30:00 
+    MD kVA TZ2                   : 0.560 kVA
+    MD kVA TZ2 time              : 2026-03-19 06:30:00 
+    MD kVA TZ3                   : 1.880 kVA
+    MD kVA TZ3 time              : 2026-03-09 13:30:00 
+    MD kVA TZ4                   : 0.580 kVA
+    MD kVA TZ4 time              : 2026-03-10 18:00:00 
+    MD kVA TZ5                   : 0.580 kVA
+    MD kVA TZ5 time              : 2026-03-09 20:30:00 
+    MD kVA TZ6                   : 0.600 kVA
+    MD kVA TZ6 time              : 2026-03-11 00:00:00 
+    MD kVA TZ7                   : 0 kVA
+    MD kVA TZ7 time              : 2000-00-00 00:00:00 
+    MD kVA TZ8                   : 0 kVA
+    MD kVA TZ8 time              : 2000-00-00 00:00:00 
+    Billing Power-on Duration    : 18510 min
+    0.0.96.99.0.255              : 0 min
+    0.0.96.99.1.255              : 360 min
+    0.0.96.99.2.255              : 600 min
+    0.0.96.99.3.255              : 840 min
+    0.0.96.99.4.255              : 1080 min
+    0.0.96.99.5.255              : 1320 min
+    0.0.96.99.6.255              : 65535 min
+    0.0.96.99.7.255              : 65535 min
+    0.1.96.99.0.255              : 1 
+    0.1.96.99.1.255              : 2 
+    0.1.96.99.2.255              : 3 
+    0.1.96.99.3.255              : 4 
+    0.1.96.99.4.255              : 5 
+    0.1.96.99.5.255              : 6 
+    0.1.96.99.6.255              : 255 
+    0.1.96.99.7.255              : 255 
+  -- Entry 7 of 13 --
+    Billing Date                 : 2026-05-01 00:00:00 
+    Billing Avg Power Factor     : 0.999 
+    Active Energy Import         : 23275.960 kWh
+    kWh TZ1                      : 1894.110 kWh
+    kWh TZ2                      : 3110.990 kWh
+    kWh TZ3                      : 7875.650 kWh
+    kWh TZ4                      : 6829.630 kWh
+    kWh TZ5                      : 2727.830 kWh
+    kWh TZ6                      : 837.790 kWh
+    kWh TZ7                      : 0 kWh
+    kWh TZ8                      : 0 kWh
+    Reactive Energy Lag          : 12.580 kvarh
+    Reactive Energy Lead         : 5322.510 kvarh
+    Apparent Energy Import       : 24132.520 kVAh
+    kVAh TZ1                     : 2092.900 kVAh
+    kVAh TZ2                     : 3245.130 kVAh
+    kVAh TZ3                     : 8038.190 kVAh
+    kVAh TZ4                     : 6996.650 kVAh
+    kVAh TZ5                     : 2863.050 kVAh
+    kVAh TZ6                     : 896.640 kVAh
+    kVAh TZ7                     : 0 kVAh
+    kVAh TZ8                     : 0 kVAh
+    MD kW                        : 0.580 kW
+    MD kW time                   : 2026-04-03 01:00:00 
+    MD kW TZ1                    : 0.580 kW
+    MD kW TZ1 time               : 2026-04-03 01:00:00 
+    MD kW TZ2                    : 0.560 kW
+    MD kW TZ2 time               : 2026-04-03 07:00:00 
+    MD kW TZ3                    : 0.540 kW
+    MD kW TZ3 time               : 2026-04-04 10:30:00 
+    MD kW TZ4                    : 0.560 kW
+    MD kW TZ4 time               : 2026-04-10 18:00:00 
+    MD kW TZ5                    : 0.560 kW
+    MD kW TZ5 time               : 2026-04-02 20:00:00 
+    MD kW TZ6                    : 0.560 kW
+    MD kW TZ6 time               : 2026-04-02 23:00:00 
+    MD kW TZ7                    : 0 kW
+    MD kW TZ7 time               : 2000-00-00 00:00:00 
+    MD kW TZ8                    : 0 kW
+    MD kW TZ8 time               : 2000-00-00 00:00:00 
+    MD kVA                       : 0.580 kVA
+    MD kVA time                  : 2026-04-03 01:00:00 
+    MD kVA TZ1                   : 0.580 kVA
+    MD kVA TZ1 time              : 2026-04-03 01:00:00 
+    MD kVA TZ2                   : 0.560 kVA
+    MD kVA TZ2 time              : 2026-04-03 07:00:00 
+    MD kVA TZ3                   : 0.540 kVA
+    MD kVA TZ3 time              : 2026-04-04 10:30:00 
+    MD kVA TZ4                   : 0.560 kVA
+    MD kVA TZ4 time              : 2026-04-10 18:00:00 
+    MD kVA TZ5                   : 0.560 kVA
+    MD kVA TZ5 time              : 2026-04-02 20:00:00 
+    MD kVA TZ6                   : 0.560 kVA
+    MD kVA TZ6 time              : 2026-04-02 23:00:00 
+    MD kVA TZ7                   : 0 kVA
+    MD kVA TZ7 time              : 2000-00-00 00:00:00 
+    MD kVA TZ8                   : 0 kVA
+    MD kVA TZ8 time              : 2000-00-00 00:00:00 
+    Billing Power-on Duration    : 5318 min
+    0.0.96.99.0.255              : 0 min
+    0.0.96.99.1.255              : 360 min
+    0.0.96.99.2.255              : 600 min
+    0.0.96.99.3.255              : 840 min
+    0.0.96.99.4.255              : 1080 min
+    0.0.96.99.5.255              : 1320 min
+    0.0.96.99.6.255              : 65535 min
+    0.0.96.99.7.255              : 65535 min
+    0.1.96.99.0.255              : 1 
+    0.1.96.99.1.255              : 2 
+    0.1.96.99.2.255              : 3 
+    0.1.96.99.3.255              : 4 
+    0.1.96.99.4.255              : 5 
+    0.1.96.99.5.255              : 6 
+    0.1.96.99.6.255              : 255 
+    0.1.96.99.7.255              : 255 
+  -- Entry 8 of 13 --
+    Billing Date                 : 2026-06-01 00:00:00 
+    Billing Avg Power Factor     : 1.000 
+    Active Energy Import         : 23276.950 kWh
+    kWh TZ1                      : 1894.110 kWh
+    kWh TZ2                      : 3110.990 kWh
+    kWh TZ3                      : 7876.100 kWh
+    kWh TZ4                      : 6830.170 kWh
+    kWh TZ5                      : 2727.830 kWh
+    kWh TZ6                      : 837.790 kWh
+    kWh TZ7                      : 0 kWh
+    kWh TZ8                      : 0 kWh
+    Reactive Energy Lag          : 12.580 kvarh
+    Reactive Energy Lead         : 5322.510 kvarh
+    Apparent Energy Import       : 24133.500 kVAh
+    kVAh TZ1                     : 2092.900 kVAh
+    kVAh TZ2                     : 3245.130 kVAh
+    kVAh TZ3                     : 8038.640 kVAh
+    kVAh TZ4                     : 6997.180 kVAh
+    kVAh TZ5                     : 2863.050 kVAh
+    kVAh TZ6                     : 896.640 kVAh
+    kVAh TZ7                     : 0 kVAh
+    kVAh TZ8                     : 0 kVAh
+    MD kW                        : 0.160 kW
+    MD kW time                   : 2026-05-19 12:00:00 
+    MD kW TZ1                    : 0 kW
+    MD kW TZ1 time               : 2000-00-00 00:00:00 
+    MD kW TZ2                    : 0 kW
+    MD kW TZ2 time               : 2000-00-00 00:00:00 
+    MD kW TZ3                    : 0.160 kW
+    MD kW TZ3 time               : 2026-05-19 12:00:00 
+    MD kW TZ4                    : 0.160 kW
+    MD kW TZ4 time               : 2026-05-19 14:30:00 
+    MD kW TZ5                    : 0 kW
+    MD kW TZ5 time               : 2000-00-00 00:00:00 
+    MD kW TZ6                    : 0 kW
+    MD kW TZ6 time               : 2000-00-00 00:00:00 
+    MD kW TZ7                    : 0 kW
+    MD kW TZ7 time               : 2000-00-00 00:00:00 
+    MD kW TZ8                    : 0 kW
+    MD kW TZ8 time               : 2000-00-00 00:00:00 
+    MD kVA                       : 0.160 kVA
+    MD kVA time                  : 2026-05-19 12:00:00 
+    MD kVA TZ1                   : 0 kVA
+    MD kVA TZ1 time              : 2000-00-00 00:00:00 
+    MD kVA TZ2                   : 0 kVA
+    MD kVA TZ2 time              : 2000-00-00 00:00:00 
+    MD kVA TZ3                   : 0.160 kVA
+    MD kVA TZ3 time              : 2026-05-19 12:00:00 
+    MD kVA TZ4                   : 0.160 kVA
+    MD kVA TZ4 time              : 2026-05-19 14:30:00 
+    MD kVA TZ5                   : 0 kVA
+    MD kVA TZ5 time              : 2000-00-00 00:00:00 
+    MD kVA TZ6                   : 0 kVA
+    MD kVA TZ6 time              : 2000-00-00 00:00:00 
+    MD kVA TZ7                   : 0 kVA
+    MD kVA TZ7 time              : 2000-00-00 00:00:00 
+    MD kVA TZ8                   : 0 kVA
+    MD kVA TZ8 time              : 2000-00-00 00:00:00 
+    Billing Power-on Duration    : 377 min
+    0.0.96.99.0.255              : 0 min
+    0.0.96.99.1.255              : 360 min
+    0.0.96.99.2.255              : 600 min
+    0.0.96.99.3.255              : 840 min
+    0.0.96.99.4.255              : 1080 min
+    0.0.96.99.5.255              : 1320 min
+    0.0.96.99.6.255              : 65535 min
+    0.0.96.99.7.255              : 65535 min
+    0.1.96.99.0.255              : 1 
+    0.1.96.99.1.255              : 2 
+    0.1.96.99.2.255              : 3 
+    0.1.96.99.3.255              : 4 
+    0.1.96.99.4.255              : 5 
+    0.1.96.99.5.255              : 6 
+    0.1.96.99.6.255              : 255 
+    0.1.96.99.7.255              : 255 
+  -- Entry 9 of 13 --
+    Billing Date                 : 2026-07-01 00:00:00 
+    Billing Avg Power Factor     : 1.000 
+    Active Energy Import         : 23277.000 kWh
+    kWh TZ1                      : 1894.110 kWh
+    kWh TZ2                      : 3110.990 kWh
+    kWh TZ3                      : 7876.100 kWh
+    kWh TZ4                      : 6830.220 kWh
+    kWh TZ5                      : 2727.830 kWh
+    kWh TZ6                      : 837.790 kWh
+    kWh TZ7                      : 0 kWh
+    kWh TZ8                      : 0 kWh
+    Reactive Energy Lag          : 12.580 kvarh
+    Reactive Energy Lead         : 5322.510 kvarh
+    Apparent Energy Import       : 24133.550 kVAh
+    kVAh TZ1                     : 2092.900 kVAh
+    kVAh TZ2                     : 3245.130 kVAh
+    kVAh TZ3                     : 8038.640 kVAh
+    kVAh TZ4                     : 6997.230 kVAh
+    kVAh TZ5                     : 2863.050 kVAh
+    kVAh TZ6                     : 896.640 kVAh
+    kVAh TZ7                     : 0 kVAh
+    kVAh TZ8                     : 0 kVAh
+    MD kW                        : 0.080 kW
+    MD kW time                   : 2026-06-07 14:30:00 
+    MD kW TZ1                    : 0 kW
+    MD kW TZ1 time               : 2000-00-00 00:00:00 
+    MD kW TZ2                    : 0 kW
+    MD kW TZ2 time               : 2000-00-00 00:00:00 
+    MD kW TZ3                    : 0 kW
+    MD kW TZ3 time               : 2000-00-00 00:00:00 
+    MD kW TZ4                    : 0.080 kW
+    MD kW TZ4 time               : 2026-06-07 14:30:00 
+    MD kW TZ5                    : 0 kW
+    MD kW TZ5 time               : 2000-00-00 00:00:00 
+    MD kW TZ6                    : 0 kW
+    MD kW TZ6 time               : 2000-00-00 00:00:00 
+    MD kW TZ7                    : 0 kW
+    MD kW TZ7 time               : 2000-00-00 00:00:00 
+    MD kW TZ8                    : 0 kW
+    MD kW TZ8 time               : 2000-00-00 00:00:00 
+    MD kVA                       : 0.080 kVA
+    MD kVA time                  : 2026-06-07 14:30:00 
+    MD kVA TZ1                   : 0 kVA
+    MD kVA TZ1 time              : 2000-00-00 00:00:00 
+    MD kVA TZ2                   : 0 kVA
+    MD kVA TZ2 time              : 2000-00-00 00:00:00 
+    MD kVA TZ3                   : 0 kVA
+    MD kVA TZ3 time              : 2000-00-00 00:00:00 
+    MD kVA TZ4                   : 0.080 kVA
+    MD kVA TZ4 time              : 2026-06-07 14:30:00 
+    MD kVA TZ5                   : 0 kVA
+    MD kVA TZ5 time              : 2000-00-00 00:00:00 
+    MD kVA TZ6                   : 0 kVA
+    MD kVA TZ6 time              : 2000-00-00 00:00:00 
+    MD kVA TZ7                   : 0 kVA
+    MD kVA TZ7 time              : 2000-00-00 00:00:00 
+    MD kVA TZ8                   : 0 kVA
+    MD kVA TZ8 time              : 2000-00-00 00:00:00 
+    Billing Power-on Duration    : 19 min
+    0.0.96.99.0.255              : 0 min
+    0.0.96.99.1.255              : 360 min
+    0.0.96.99.2.255              : 600 min
+    0.0.96.99.3.255              : 840 min
+    0.0.96.99.4.255              : 1080 min
+    0.0.96.99.5.255              : 1320 min
+    0.0.96.99.6.255              : 65535 min
+    0.0.96.99.7.255              : 65535 min
+    0.1.96.99.0.255              : 1 
+    0.1.96.99.1.255              : 2 
+    0.1.96.99.2.255              : 3 
+    0.1.96.99.3.255              : 4 
+    0.1.96.99.4.255              : 5 
+    0.1.96.99.5.255              : 6 
+    0.1.96.99.6.255              : 255 
+    0.1.96.99.7.255              : 255 
+  -- Entry 10 of 13 --
+    Billing Date                 : 2026-08-01 00:00:00 
+    Billing Avg Power Factor     : 0.999 
+    Active Energy Import         : 23311.410 kWh
+    kWh TZ1                      : 1902.540 kWh
+    kWh TZ2                      : 3119.350 kWh
+    kWh TZ3                      : 7881.220 kWh
+    kWh TZ4                      : 6832.590 kWh
+    kWh TZ5                      : 2734.660 kWh
+    kWh TZ6                      : 841.090 kWh
+    kWh TZ7                      : 0 kWh
+    kWh TZ8                      : 0 kWh
+    Reactive Energy Lag          : 12.590 kvarh
+    Reactive Energy Lead         : 5322.510 kvarh
+    Apparent Energy Import       : 24167.980 kVAh
+    kVAh TZ1                     : 2101.320 kVAh
+    kVAh TZ2                     : 3253.500 kVAh
+    kVAh TZ3                     : 8043.730 kVAh
+    kVAh TZ4                     : 6999.610 kVAh
+    kVAh TZ5                     : 2869.920 kVAh
+    kVAh TZ6                     : 899.940 kVAh
+    kVAh TZ7                     : 0 kVAh
+    kVAh TZ8                     : 0 kVAh
+    MD kW                        : 0.360 kW
+    MD kW time                   : 2026-07-05 19:30:00 
+    MD kW TZ1                    : 0.360 kW
+    MD kW TZ1 time               : 2026-07-27 01:00:00 
+    MD kW TZ2                    : 0.360 kW
+    MD kW TZ2 time               : 2026-07-10 07:00:00 
+    MD kW TZ3                    : 0.360 kW
+    MD kW TZ3 time               : 2026-07-21 12:30:00 
+    MD kW TZ4                    : 0.360 kW
+    MD kW TZ4 time               : 2026-07-26 16:30:00 
+    MD kW TZ5                    : 0.360 kW
+    MD kW TZ5 time               : 2026-07-05 19:30:00 
+    MD kW TZ6                    : 0.340 kW
+    MD kW TZ6 time               : 2026-07-10 00:00:00 
+    MD kW TZ7                    : 0 kW
+    MD kW TZ7 time               : 2000-00-00 00:00:00 
+    MD kW TZ8                    : 0 kW
+    MD kW TZ8 time               : 2000-00-00 00:00:00 
+    MD kVA                       : 0.360 kVA
+    MD kVA time                  : 2026-07-05 19:30:00 
+    MD kVA TZ1                   : 0.360 kVA
+    MD kVA TZ1 time              : 2026-07-27 01:00:00 
+    MD kVA TZ2                   : 0.360 kVA
+    MD kVA TZ2 time              : 2026-07-10 07:00:00 
+    MD kVA TZ3                   : 0.360 kVA
+    MD kVA TZ3 time              : 2026-07-21 12:30:00 
+    MD kVA TZ4                   : 0.360 kVA
+    MD kVA TZ4 time              : 2026-07-26 16:30:00 
+    MD kVA TZ5                   : 0.360 kVA
+    MD kVA TZ5 time              : 2026-07-05 19:30:00 
+    MD kVA TZ6                   : 0.340 kVA
+    MD kVA TZ6 time              : 2026-07-10 00:00:00 
+    MD kVA TZ7                   : 0 kVA
+    MD kVA TZ7 time              : 2000-00-00 00:00:00 
+    MD kVA TZ8                   : 0 kVA
+    MD kVA TZ8 time              : 2000-00-00 00:00:00 
+    Billing Power-on Duration    : 6330 min
+    0.0.96.99.0.255              : 0 min
+    0.0.96.99.1.255              : 360 min
+    0.0.96.99.2.255              : 600 min
+    0.0.96.99.3.255              : 840 min
+    0.0.96.99.4.255              : 1080 min
+    0.0.96.99.5.255              : 1320 min
+    0.0.96.99.6.255              : 65535 min
+    0.0.96.99.7.255              : 65535 min
+    0.1.96.99.0.255              : 1 
+    0.1.96.99.1.255              : 2 
+    0.1.96.99.2.255              : 3 
+    0.1.96.99.3.255              : 4 
+    0.1.96.99.4.255              : 5 
+    0.1.96.99.5.255              : 6 
+    0.1.96.99.6.255              : 255 
+    0.1.96.99.7.255              : 255 
+  -- Entry 11 of 13 --
+    Billing Date                 : 2026-09-01 00:00:00 
+    Billing Avg Power Factor     : 1.000 
+    Active Energy Import         : 23343.830 kWh
+    kWh TZ1                      : 1904.710 kWh
+    kWh TZ2                      : 3123.860 kWh
+    kWh TZ3                      : 7888.270 kWh
+    kWh TZ4                      : 6840.350 kWh
+    kWh TZ5                      : 2743.620 kWh
+    kWh TZ6                      : 843.060 kWh
+    kWh TZ7                      : 0 kWh
+    kWh TZ8                      : 0 kWh
+    Reactive Energy Lag          : 12.590 kvarh
+    Reactive Energy Lead         : 5322.510 kvarh
+    Apparent Energy Import       : 24200.400 kVAh
+    kVAh TZ1                     : 2103.490 kVAh
+    kVAh TZ2                     : 3258.020 kVAh
+    kVAh TZ3                     : 8050.780 kVAh
+    kVAh TZ4                     : 7007.390 kVAh
+    kVAh TZ5                     : 2878.880 kVAh
+    kVAh TZ6                     : 901.880 kVAh
+    kVAh TZ7                     : 0 kVAh
+    kVAh TZ8                     : 0 kVAh
+    MD kW                        : 0.360 kW
+    MD kW time                   : 2026-08-03 18:00:00 
+    MD kW TZ1                    : 0.360 kW
+    MD kW TZ1 time               : 2026-08-11 02:00:00 
+    MD kW TZ2                    : 0.340 kW
+    MD kW TZ2 time               : 2026-08-04 08:30:00 
+    MD kW TZ3                    : 0.340 kW
+    MD kW TZ3 time               : 2026-08-09 12:00:00 
+    MD kW TZ4                    : 0.360 kW
+    MD kW TZ4 time               : 2026-08-03 18:00:00 
+    MD kW TZ5                    : 0.360 kW
+    MD kW TZ5 time               : 2026-08-15 19:00:00 
+    MD kW TZ6                    : 0.340 kW
+    MD kW TZ6 time               : 2026-08-03 22:30:00 
+    MD kW TZ7                    : 0 kW
+    MD kW TZ7 time               : 2000-00-00 00:00:00 
+    MD kW TZ8                    : 0 kW
+    MD kW TZ8 time               : 2000-00-00 00:00:00 
+    MD kVA                       : 0.360 kVA
+    MD kVA time                  : 2026-08-03 18:00:00 
+    MD kVA TZ1                   : 0.360 kVA
+    MD kVA TZ1 time              : 2026-08-11 02:00:00 
+    MD kVA TZ2                   : 0.340 kVA
+    MD kVA TZ2 time              : 2026-08-04 08:30:00 
+    MD kVA TZ3                   : 0.340 kVA
+    MD kVA TZ3 time              : 2026-08-09 12:00:00 
+    MD kVA TZ4                   : 0.360 kVA
+    MD kVA TZ4 time              : 2026-08-03 18:00:00 
+    MD kVA TZ5                   : 0.360 kVA
+    MD kVA TZ5 time              : 2026-08-15 19:00:00 
+    MD kVA TZ6                   : 0.340 kVA
+    MD kVA TZ6 time              : 2026-08-01 23:00:00 
+    MD kVA TZ7                   : 0 kVA
+    MD kVA TZ7 time              : 2000-00-00 00:00:00 
+    MD kVA TZ8                   : 0 kVA
+    MD kVA TZ8 time              : 2000-00-00 00:00:00 
+    Billing Power-on Duration    : 5958 min
+    0.0.96.99.0.255              : 0 min
+    0.0.96.99.1.255              : 360 min
+    0.0.96.99.2.255              : 600 min
+    0.0.96.99.3.255              : 840 min
+    0.0.96.99.4.255              : 1080 min
+    0.0.96.99.5.255              : 1320 min
+    0.0.96.99.6.255              : 65535 min
+    0.0.96.99.7.255              : 65535 min
+    0.1.96.99.0.255              : 1 
+    0.1.96.99.1.255              : 2 
+    0.1.96.99.2.255              : 3 
+    0.1.96.99.3.255              : 4 
+    0.1.96.99.4.255              : 5 
+    0.1.96.99.5.255              : 6 
+    0.1.96.99.6.255              : 255 
+    0.1.96.99.7.255              : 255 
+  -- Entry 12 of 13 --
+    Billing Date                 : 2026-10-01 00:00:00 
+    Billing Avg Power Factor     : 0.999 
+    Active Energy Import         : 23415.630 kWh
+    kWh TZ1                      : 1920.480 kWh
+    kWh TZ2                      : 3135.970 kWh
+    kWh TZ3                      : 7901.520 kWh
+    kWh TZ4                      : 6853.070 kWh
+    kWh TZ5                      : 2755.620 kWh
+    kWh TZ6                      : 849.010 kWh
+    kWh TZ7                      : 0 kWh
+    kWh TZ8                      : 0 kWh
+    Reactive Energy Lag          : 12.600 kvarh
+    Reactive Energy Lead         : 5322.510 kvarh
+    Apparent Energy Import       : 24272.210 kVAh
+    kVAh TZ1                     : 2119.260 kVAh
+    kVAh TZ2                     : 3270.140 kVAh
+    kVAh TZ3                     : 8064.030 kVAh
+    kVAh TZ4                     : 7020.100 kVAh
+    kVAh TZ5                     : 2890.890 kVAh
+    kVAh TZ6                     : 907.830 kVAh
+    kVAh TZ7                     : 0 kVAh
+    kVAh TZ8                     : 0 kVAh
+    MD kW                        : 0.360 kW
+    MD kW time                   : 2026-09-22 13:30:00 
+    MD kW TZ1                    : 0.360 kW
+    MD kW TZ1 time               : 2026-09-24 02:30:00 
+    MD kW TZ2                    : 0.340 kW
+    MD kW TZ2 time               : 2026-09-21 07:30:00 
+    MD kW TZ3                    : 0.360 kW
+    MD kW TZ3 time               : 2026-09-22 13:30:00 
+    MD kW TZ4                    : 0.360 kW
+    MD kW TZ4 time               : 2026-09-22 17:30:00 
+    MD kW TZ5                    : 0.340 kW
+    MD kW TZ5 time               : 2026-09-22 18:30:00 
+    MD kW TZ6                    : 0.340 kW
+    MD kW TZ6 time               : 2026-09-22 23:30:00 
+    MD kW TZ7                    : 0 kW
+    MD kW TZ7 time               : 2000-00-00 00:00:00 
+    MD kW TZ8                    : 0 kW
+    MD kW TZ8 time               : 2000-00-00 00:00:00 
+    MD kVA                       : 0.360 kVA
+    MD kVA time                  : 2026-09-22 13:30:00 
+    MD kVA TZ1                   : 0.360 kVA
+    MD kVA TZ1 time              : 2026-09-24 02:30:00 
+    MD kVA TZ2                   : 0.340 kVA
+    MD kVA TZ2 time              : 2026-09-21 07:30:00 
+    MD kVA TZ3                   : 0.360 kVA
+    MD kVA TZ3 time              : 2026-09-22 13:30:00 
+    MD kVA TZ4                   : 0.360 kVA
+    MD kVA TZ4 time              : 2026-09-22 17:30:00 
+    MD kVA TZ5                   : 0.340 kVA
+    MD kVA TZ5 time              : 2026-09-22 18:30:00 
+    MD kVA TZ6                   : 0.340 kVA
+    MD kVA TZ6 time              : 2026-09-22 23:30:00 
+    MD kVA TZ7                   : 0 kVA
+    MD kVA TZ7 time              : 2000-00-00 00:00:00 
+    MD kVA TZ8                   : 0 kVA
+    MD kVA TZ8 time              : 2000-00-00 00:00:00 
+    Billing Power-on Duration    : 13212 min
+    0.0.96.99.0.255              : 0 min
+    0.0.96.99.1.255              : 360 min
+    0.0.96.99.2.255              : 600 min
+    0.0.96.99.3.255              : 840 min
+    0.0.96.99.4.255              : 1080 min
+    0.0.96.99.5.255              : 1320 min
+    0.0.96.99.6.255              : 65535 min
+    0.0.96.99.7.255              : 65535 min
+    0.1.96.99.0.255              : 1 
+    0.1.96.99.1.255              : 2 
+    0.1.96.99.2.255              : 3 
+    0.1.96.99.3.255              : 4 
+    0.1.96.99.4.255              : 5 
+    0.1.96.99.5.255              : 6 
+    0.1.96.99.6.255              : 255 
+    0.1.96.99.7.255              : 255 
+  -- Entry 13 of 13 --
+    Billing Date                 : 2026-10-14 10:56:17 
+    Billing Avg Power Factor     : 1.000 
+    Active Energy Import         : 23496.050 kWh
+    kWh TZ1                      : 1940.520 kWh
+    kWh TZ2                      : 3148.630 kWh
+    kWh TZ3                      : 7914.770 kWh
+    kWh TZ4                      : 6867.280 kWh
+    kWh TZ5                      : 2769.800 kWh
+    kWh TZ6                      : 855.080 kWh
+    kWh TZ7                      : 0 kWh
+    kWh TZ8                      : 0 kWh
+    Reactive Energy Lag          : 12.600 kvarh
+    Reactive Energy Lead         : 5322.510 kvarh
+    Apparent Energy Import       : 24352.630 kVAh
+    kVAh TZ1                     : 2139.300 kVAh
+    kVAh TZ2                     : 3282.800 kVAh
+    kVAh TZ3                     : 8077.280 kVAh
+    kVAh TZ4                     : 7034.330 kVAh
+    kVAh TZ5                     : 2905.060 kVAh
+    kVAh TZ6                     : 913.900 kVAh
+    kVAh TZ7                     : 0 kVAh
+    kVAh TZ8                     : 0 kVAh
+    MD kW                        : 0.360 kW
+    MD kW time                   : 2026-10-02 12:00:00 
+    MD kW TZ1                    : 0.360 kW
+    MD kW TZ1 time               : 2026-10-03 04:30:00 
+    MD kW TZ2                    : 0.340 kW
+    MD kW TZ2 time               : 2026-10-01 08:00:00 
+    MD kW TZ3                    : 0.360 kW
+    MD kW TZ3 time               : 2026-10-02 12:00:00 
+    MD kW TZ4                    : 0.360 kW
+    MD kW TZ4 time               : 2026-10-04 18:00:00 
+    MD kW TZ5                    : 0.340 kW
+    MD kW TZ5 time               : 2026-10-02 18:30:00 
+    MD kW TZ6                    : 0.340 kW
+    MD kW TZ6 time               : 2026-10-04 23:30:00 
+    MD kW TZ7                    : 0 kW
+    MD kW TZ7 time               : 2000-00-00 00:00:00 
+    MD kW TZ8                    : 0 kW
+    MD kW TZ8 time               : 2000-00-00 00:00:00 
+    MD kVA                       : 0.360 kVA
+    MD kVA time                  : 2026-10-02 12:00:00 
+    MD kVA TZ1                   : 0.360 kVA
+    MD kVA TZ1 time              : 2026-10-03 04:30:00 
+    MD kVA TZ2                   : 0.340 kVA
+    MD kVA TZ2 time              : 2026-10-01 08:00:00 
+    MD kVA TZ3                   : 0.360 kVA
+    MD kVA TZ3 time              : 2026-10-02 12:00:00 
+    MD kVA TZ4                   : 0.360 kVA
+    MD kVA TZ4 time              : 2026-10-04 18:00:00 
+    MD kVA TZ5                   : 0.340 kVA
+    MD kVA TZ5 time              : 2026-10-02 18:30:00 
+    MD kVA TZ6                   : 0.340 kVA
+    MD kVA TZ6 time              : 2026-10-04 23:30:00 
+    MD kVA TZ7                   : 0 kVA
+    MD kVA TZ7 time              : 2000-00-00 00:00:00 
+    MD kVA TZ8                   : 0 kVA
+    MD kVA TZ8 time              : 2000-00-00 00:00:00 
+    Billing Power-on Duration    : 14913 min
+    0.0.96.99.0.255              : 0 min
+    0.0.96.99.1.255              : 360 min
+    0.0.96.99.2.255              : 600 min
+    0.0.96.99.3.255              : 840 min
+    0.0.96.99.4.255              : 1080 min
+    0.0.96.99.5.255              : 1320 min
+    0.0.96.99.6.255              : 65535 min
+    0.0.96.99.7.255              : 65535 min
+    0.1.96.99.0.255              : 1 
+    0.1.96.99.1.255              : 2 
+    0.1.96.99.2.255              : 3 
+    0.1.96.99.3.255              : 4 
+    0.1.96.99.4.255              : 5 
+    0.1.96.99.5.255              : 6 
+    0.1.96.99.6.255              : 255 
+    0.1.96.99.7.255              : 255 
+
+---------------- Event Log: Voltage (0.0.99.98.0.255) ----------------
+  Columns 13, capture period 0 s, entries 19 of 40
+  Buffer read in 491 ms
+  Rows read: 6
+    c1   Clock                        0.0.1.0.0.255        
+    c2   Event Code: Voltage          0.0.96.11.0.255      
+    c3   Current L1                   1.0.31.7.0.255       A
+    c4   Current L2                   1.0.51.7.0.255       A
+    c5   Current L3                   1.0.71.7.0.255       A
+    c6   Voltage L1                   1.0.32.7.0.255       V
+    c7   Voltage L2                   1.0.52.7.0.255       V
+    c8   Voltage L3                   1.0.72.7.0.255       V
+    c9   Power Factor L1              1.0.33.7.0.255       
+    c10  Power Factor L2              1.0.53.7.0.255       
+    c11  Power Factor L3              1.0.73.7.0.255       
+    c12  Active Energy Import         1.0.1.8.0.255        kWh
+    c13  Apparent Energy Import       1.0.9.8.0.255        kVAh
+  #    c1                  c2   c3    c4    c5    c6      c7      c8      c9    c10   c11   c12      c13      
+  1    2023-09-04 00:57:31 7    0.000 0.000 0.050 311.240 368.830 127.020 1.000 1.000 0.000 1755.690 1826.280  Over voltage - Occ
+  2    2023-09-04 05:17:47 8    0.000 0.000 0.000 0.000   253.140 0.000   1.000 1.000 1.000 1756.850 1828.000  Over voltage - Res
+  3    2024-10-21 18:05:16 1    0.400 0.075 0.675 92.370  152.330 234.990 1.000 -0.852 -0.988 20113.890 20872.010  R voltage missing - Occ
+  4    2024-10-22 08:18:40 2    0.300 0.250 0.350 249.360 252.840 248.420 -0.944 -0.964 -0.953 20118.610 20877.110  R voltage missing - Res
+  5    2026-03-07 22:56:25 7    0.000 0.000 0.000 274.130 276.570 271.330 1.000 1.000 1.000 23076.710 23933.260  Over voltage - Occ
+  6    2026-03-08 06:30:04 8    0.000 0.000 0.000 260.660 263.860 256.440 1.000 1.000 1.000 23076.710 23933.260  Over voltage - Res
+
+---------------- Event Log: Current (0.0.99.98.1.255) ----------------
+  Columns 13, capture period 0 s, entries 6 of 80
+  Buffer read in 2074 ms
+  Rows read: 26
+    c1   Clock                        0.0.1.0.0.255        
+    c2   Event Code: Current          0.0.96.11.1.255      
+    c3   Current L1                   1.0.31.7.0.255       A
+    c4   Current L2                   1.0.51.7.0.255       A
+    c5   Current L3                   1.0.71.7.0.255       A
+    c6   Voltage L1                   1.0.32.7.0.255       V
+    c7   Voltage L2                   1.0.52.7.0.255       V
+    c8   Voltage L3                   1.0.72.7.0.255       V
+    c9   Power Factor L1              1.0.33.7.0.255       
+    c10  Power Factor L2              1.0.53.7.0.255       
+    c11  Power Factor L3              1.0.73.7.0.255       
+    c12  Active Energy Import         1.0.1.8.0.255        kWh
+    c13  Apparent Energy Import       1.0.9.8.0.255        kVAh
+  #    c1                  c2   c3    c4    c5    c6      c7      c8      c9    c10   c11    c12     c13     
+  1    2023-08-02 09:36:49 59   1.300 0.050 0.275 242.430 262.010 236.870 0.996 1.000 -0.965 389.020 404.930  Y CT open - Occ
+  2    2023-08-04 12:38:23 60   0.925 1.250 0.775 254.840 248.370 243.340 -0.980 0.994 -0.974 530.090 549.370  Y CT open - Res
+  3    2023-08-07 08:46:03 61   1.250 0.650 0.175 244.910 260.790 243.320 0.996 0.993 -0.851 646.900 670.530  B CT open - Occ
+  4    2023-08-08 08:32:47 59   1.350 0.025 0.200 236.220 258.410 243.960 0.996 1.000 -0.880 706.280 731.400  Y CT open - Occ
+  5    2023-08-10 12:59:55 62   0.600 0.525 1.400 252.290 250.310 241.690 -0.980 0.992 0.992  842.010 870.710  B CT open - Res
+  6    2024-04-16 15:10:46 60   0.875 1.250 1.125 240.300 246.760 243.580 0.993 0.996 0.992  9966.700 10460.900  Y CT open - Res
+  7    2024-04-25 14:44:44 57   0.175 0.775 1.275 241.800 246.690 241.790 -0.969 0.997 0.993  10573.690 11074.720  R CT open - Occ
+  8    2024-04-29 08:20:06 58   1.425 0.050 0.325 243.670 253.820 248.470 0.999 1.000 -0.968 10714.950 11218.100  R CT open - Res
+  9    2024-04-29 08:20:06 59   1.400 0.050 0.325 243.650 253.770 248.440 0.999 1.000 -0.967 10714.950 11218.100  Y CT open - Occ
+  10   2024-04-30 15:56:36 60   1.025 1.325 1.225 242.410 246.600 243.700 -0.986 0.996 0.993  10867.810 11371.520  Y CT open - Res
+  11   2024-05-15 12:07:01 57   0.200 1.350 1.150 247.660 249.860 245.400 -0.988 0.996 0.993  11738.070 12253.050  R CT open - Occ
+  12   2024-05-16 09:28:47 58   1.350 0.750 0.950 242.990 251.860 248.260 0.996 -0.986 -0.989 11797.630 12313.780  R CT open - Res
+  13   2024-06-10 12:17:36 57   0.225 1.300 1.125 251.840 253.090 249.170 -0.905 0.995 0.993  13389.180 13940.350  R CT open - Occ
+  14   2024-06-12 09:07:14 58   1.275 0.825 1.025 247.910 253.790 246.910 0.994 -0.986 0.991  13515.770 14069.510  R CT open - Res
+  15   2024-06-12 19:03:02 59   1.500 0.225 0.350 245.410 252.790 246.990 0.996 -0.937 -0.916 13600.800 14154.610  Y CT open - Occ
+  16   2024-06-13 08:16:52 57   0.075 1.250 1.025 252.920 254.740 250.070 -0.938 0.995 0.991  13618.250 14172.830  R CT open - Occ
+  17   2024-06-13 08:16:52 60   0.075 1.250 1.025 252.970 254.800 250.040 -0.938 0.995 0.991  13618.250 14172.830  Y CT open - Res
+  18   2024-06-13 08:50:37 58   1.250 1.225 1.000 247.730 252.500 248.370 0.994 0.994 0.991  13621.710 14176.290  R CT open - Res
+  19   2024-06-18 20:48:51 59   1.250 0.200 0.275 240.140 246.290 240.590 0.992 -0.933 -0.953 14017.130 14579.360  Y CT open - Occ
+  20   2024-07-04 11:25:07 60   0.675 1.275 1.175 242.720 244.430 244.780 -0.987 0.996 0.992  14918.580 15504.110  Y CT open - Res
+  21   2024-08-21 15:12:58 57   0.200 1.275 1.200 244.730 246.230 243.010 -0.885 0.997 0.993  17452.890 18115.510  R CT open - Occ
+  22   2024-08-28 12:46:54 58   1.350 1.250 0.675 240.750 245.870 242.530 0.993 0.997 -0.971 17768.620 18441.880  R CT open - Res
+  23   2024-09-17 08:32:45 59   1.300 0.200 0.350 243.040 249.750 242.740 0.995 -0.933 -0.964 18562.770 19272.550  Y CT open - Occ
+  24   2024-09-17 14:50:35 60   0.750 1.275 1.050 245.420 245.920 241.810 -0.975 0.997 0.991  18604.300 19314.180  Y CT open - Res
+  25   2024-09-19 16:23:05 57   0.150 1.250 1.100 254.050 254.720 250.140 -0.962 0.995 0.992  18756.730 19469.590  R CT open - Occ
+  26   2024-09-20 08:56:24 58   1.325 0.750 1.000 240.330 247.190 243.820 0.996 0.993 0.992  18780.260 19494.240  R CT open - Res
+
+---------------- Event Log: Power (0.0.99.98.2.255) ----------------
+  Columns 2, capture period 0 s, entries 26 of 80
+  Buffer read in 521 ms
+  Rows read: 20
+    c1   Clock                        0.0.1.0.0.255        
+    c2   Event Code: Power            0.0.96.11.2.255      
+  #    c1                  c2   
+  1    2026-09-19 21:42:28 101   Power failure - Occ
+  2    2026-09-21 07:00:21 102   Power failure - Res
+  3    2026-09-21 16:47:02 101   Power failure - Occ
+  4    2026-09-21 20:35:47 102   Power failure - Res
+  5    2026-09-21 22:57:02 101   Power failure - Occ
+  6    2026-09-22 08:13:08 102   Power failure - Res
+  7    2026-09-23 04:58:05 101   Power failure - Occ
+  8    2026-09-23 05:27:56 102   Power failure - Res
+  9    2026-10-10 07:49:27 101   Power failure - Occ
+  10   2026-10-10 15:27:36 102   Power failure - Res
+  11   2026-10-10 18:38:25 101   Power failure - Occ
+  12   2026-10-10 20:42:31 102   Power failure - Res
+  13   2026-10-10 22:25:15 101   Power failure - Occ
+  14   2026-10-11 16:21:23 102   Power failure - Res
+  15   2026-10-11 22:13:49 101   Power failure - Occ
+  16   2026-10-12 09:52:34 102   Power failure - Res
+  17   2026-10-12 21:26:43 101   Power failure - Occ
+  18   2026-10-13 22:28:54 102   Power failure - Res
+  19   2026-10-13 23:17:14 101   Power failure - Occ
+  20   2026-10-14 09:19:38 102   Power failure - Res
+
+---------------- Event Log: Transaction (0.0.99.98.3.255) ----------------
+  Columns 2, capture period 0 s, entries 20 of 20
+  Buffer read in 341 ms
+  Rows read: 11
+    c1   Clock                        0.0.1.0.0.255        
+    c2   Event Code: Transaction      0.0.96.11.3.255      
+  #    c1                  c2   
+  1    2023-07-03 12:37:05 166   MD reset
+  2    2023-08-02 18:44:40 166   MD reset
+  3    2023-08-31 13:16:20 166   MD reset
+  4    2023-10-03 16:30:38 166   MD reset
+  5    2023-10-31 11:53:47 166   MD reset
+  6    2023-12-01 16:30:03 166   MD reset
+  7    2024-01-03 18:08:40 166   MD reset
+  8    2024-01-31 12:56:10 166   MD reset
+  9    2024-03-01 08:04:22 166   MD reset
+  10   2024-04-30 11:08:22 166   MD reset
+  11   2024-11-30 09:27:45 166   MD reset
+
+---------------- Event Log: Other (0.0.99.98.4.255) ----------------
+  Columns 13, capture period 0 s, entries 11 of 30
+  Buffer read in 501 ms
+  Rows read: 6
+    c1   Clock                        0.0.1.0.0.255        
+    c2   Event Code: Other            0.0.96.11.4.255      
+    c3   Current L1                   1.0.31.7.0.255       A
+    c4   Current L2                   1.0.51.7.0.255       A
+    c5   Current L3                   1.0.71.7.0.255       A
+    c6   Voltage L1                   1.0.32.7.0.255       V
+    c7   Voltage L2                   1.0.52.7.0.255       V
+    c8   Voltage L3                   1.0.72.7.0.255       V
+    c9   Power Factor L1              1.0.33.7.0.255       
+    c10  Power Factor L2              1.0.53.7.0.255       
+    c11  Power Factor L3              1.0.73.7.0.255       
+    c12  Active Energy Import         1.0.1.8.0.255        kWh
+    c13  Apparent Energy Import       1.0.9.8.0.255        kVAh
+  #    c1                  c2   c3    c4    c5    c6      c7      c8      c9    c10   c11   c12      c13      
+  1    2023-09-04 00:57:31 203  0.000 0.000 0.050 311.240 368.830 127.020 1.000 1.000 0.000 1755.690 1826.280  Neutral disturbance - Occ
+  2    2023-09-04 02:18:12 205  0.000 0.000 0.100 122.480 331.340 346.540 1.000 1.000 0.000 1756.140 1826.870  Low PF - Occ
+  3    2023-09-04 05:17:49 204  0.000 0.000 0.000 248.320 253.350 0.000   1.000 1.000 1.000 1756.850 1828.000  Neutral disturbance - Res
+  4    2023-09-04 05:18:06 206  0.000 0.000 0.650 247.840 253.080 247.760 1.000 1.000 0.994 1756.850 1828.000  Low PF - Res
+  5    2024-07-17 21:46:51 205  0.000 0.050 0.000 0.000   231.800 0.000   1.000 -0.113 1.000 15589.850 16196.870  Low PF - Occ
+  6    2024-07-17 23:20:04 206  0.000 0.050 0.450 248.160 251.500 248.790 1.000 -0.138 -0.984 15590.070 16197.200  Low PF - Res
+
+---------------- Event Log: Non-roll (0.0.99.98.5.255) ----------------
+  Columns 2, capture period 0 s, entries 0 of 1
+  Buffer read in 60 ms
+  Rows read: 0
+
+---------------- Daily Load Profile (1.0.99.2.0.255) ----------------
+  Columns 3, capture period 86400 s, entries 45 of 45
+  Reading range 2026-10-07 10:56:03 .. 2026-10-15 10:56:03
+  Buffer read in 500 ms
+  Rows read: 7
+    c1   Clock                        0.0.1.0.0.255        
+    c2   Active Energy Import         1.0.1.8.0.255        kWh
+    c3   Apparent Energy Import       1.0.9.8.0.255        kVAh
+  #    c1                  c2        c3        
+  1    2026-10-08 00:00:00 23469.940 24326.510 
+  2    2026-10-09 00:00:00 23477.780 24334.350 
+  3    2026-10-10 00:00:00 23485.620 24342.190 
+  4    2026-10-11 00:00:00 23489.750 24346.330 
+  5    2026-10-12 00:00:00 23491.640 24348.220 
+  6    2026-10-13 00:00:00 23495.280 24351.860 
+  7    2026-10-14 00:00:00 23495.530 24352.120 
+
+---------------- Name Plate Profile (0.0.94.91.10.255) ----------------
+  Columns 9, capture period 1 s, entries 1 of 1
+  Buffer read in 140 ms
+  Rows read: 1
+  -- Entry 1 of 1 --
+    Meter Serial Number          : 9120944 
+    Manufacturer Name            : Avon Meters Pvt. Ltd. 
+    Firmware Version             : ADMS3.0 
+    Meter Type                   : 3 
+    Meter Category               : C1 
+    Current Rating               : 05-06A 
+    Active Meter Constant        : 25 
+    Reactive Meter Constant      : 1 
+    Year of Manufacture          : 2021 
+=============================================================
