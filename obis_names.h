@@ -29,12 +29,15 @@ static const ObisName OBIS_NAMES[] =
   {"0.0.22.0.0.255",     "HDLC Setup"},
   {"0.0.43.0.0.255",     "Security Setup"},
   {"0.0.43.1.0.255",     "Frame Counter"},
-  {"0.0.10.0.1.255",     "MD Reset Script"},
+  {"0.0.10.0.1.255",     "Billing Script Table"},
   {"0.0.10.0.100.255",   "Tariff Script"},
   {"0.0.13.0.0.255",     "Activity Calendar"},
   {"0.0.15.0.0.255",     "Single Action Schedule"},
   {"0.0.17.0.0.255",     "Limiter"},
   {"0.0.25.9.0.255",     "Push Setup"},
+  {"0.0.25.0.0.255",     "TCP/UDP Setup"},
+  {"0.0.25.1.0.255",     "IPv4 Setup"},
+  {"0.0.25.2.0.255",     "MAC Address Setup"},
   {"0.0.96.3.10.255",    "Disconnect Control"},
 
   // ── Meter identity ──────────────────────────────────────────────────────
@@ -74,8 +77,8 @@ static const ObisName OBIS_NAMES[] =
   {"0.0.99.98.6.255",    "Event Log: Control"},
 
   // ── Configuration ───────────────────────────────────────────────────────
-  {"1.0.0.4.2.255",      "Active Meter Constant"},
-  {"1.0.0.4.3.255",      "Reactive Meter Constant"},
+  {"1.0.0.4.2.255",      "CT Ratio"},
+  {"1.0.0.4.3.255",      "PT Ratio"},
   {"1.0.0.8.0.255",      "Demand Integration Period"},
   {"1.0.0.8.4.255",      "Profile Capture Period"},
   {"1.0.0.8.5.255",      "Daily Profile Period"},
@@ -180,6 +183,16 @@ static const ObisName OBIS_NAMES[] =
   {"1.0.9.29.0.255",     "Block kVAh"},
   {"1.0.10.29.0.255",    "Block kVAh Export"},
   {"1.0.13.27.0.255",    "Avg Power Factor"},
+
+  // ── L&T / Schneider vendor objects (from the meter's parameter list) ─
+  {"0.128.140.128.128.255", "Anomaly Data"},
+  {"0.128.141.128.128.255", "Name Plate Details (L&T)"},
+  {"0.128.150.128.128.255", "Meter Version (L&T)"},
+  {"0.128.152.128.128.255", "Lead/UPF/Import-Export Flag"},
+  {"0.128.153.128.128.255", "Reset Type"},
+  {"0.128.164.128.128.255", "Firmware Upgrade Count"},
+  {"0.128.165.128.128.255", "Firmware Upgrade Date/Time"},
+  {"0.128.187.0.128.255",   "Running Tamper Events"},
 
   // ── Profiles ────────────────────────────────────────────────────────────
   {"1.0.94.91.0.255",    "Instantaneous Profile"},

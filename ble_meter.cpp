@@ -2,6 +2,7 @@
 //  ble_meter.cpp  --  BLE GATT interface. See ble_meter.h for the protocol.
 // =============================================================================
 #include "ble_meter.h"
+#include "trace_tee.h"
 #include <BLEDevice.h>
 #include <BLEServer.h>
 #include <BLE2902.h>
@@ -239,7 +240,7 @@ void ble_begin(uint32_t readIntervalMs)
   adv->addServiceUUID(BLE_SERVICE_UUID);
   adv->setScanResponse(true);
   BLEDevice::startAdvertising();
-  Serial.printf("\r\nBLE advertising as %s\r\n", name);
+  TraceLog.printf("\r\nBLE advertising as %s\r\n", name);
 }
 
 void ble_poll()
@@ -250,7 +251,7 @@ void ble_poll()
     g_wasConnected = false;
     delay(200);
     BLEDevice::startAdvertising();
-    Serial.print("\r\nBLE client disconnected, advertising again\r\n");
+    TraceLog.print("\r\nBLE client disconnected, advertising again\r\n");
   }
   if (g_getRequest)
   {

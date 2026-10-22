@@ -37,6 +37,7 @@
 #include "include/dlms.h"
 #include "obis_names.h"
 #include "ble_meter.h"
+#include "trace_tee.h"
 
 #if !defined(ARDUINO_ARCH_ESP32)
 #error "This sketch is configured for ESP32-S3. Select an ESP32-S3 board."
@@ -68,6 +69,21 @@
 // 1 = print every sent/received HDLC frame in hex.
 #define METER_TRACE_FRAMES    0
 
+// Log bridge (log_bridge.ino): everything printed on the USB serial port is
+// also uploaded to the log server after each read cycle, over the EC200U.
+// Server: server_new log receiver (LOG_TCP_PORT). "" = upload off.
+#define LOG_SERVER_HOST   ""                 // e.g. "65.20.77.137"
+#define LOG_SERVER_PORT   5001
+#define LOG_DEVICE_ID     ""                 // "" = ESP-<last 3 MAC bytes>
+#define LOG_APN           "airtelgprs.com"
+#define LOG_UPLOAD_MAX    (128UL * 1024UL)   // most bytes sent per cycle
+
+// EC200U modem on UART2 (same board as dlms_client).
+#define MODEM_TX_PIN      17
+#define MODEM_RX_PIN      18
+#define MODEM_WAKE_PIN    10
+#define MODEM_BAUD        9600
+
 // 1 = run a loopback test instead of talking to the meter.
 //     Short RS-232 pins 2 and 3 on the meter-side connector before enabling.
 #define METER_LOOPBACK_TEST   0
@@ -98,8 +114,9 @@ typedef struct
 
 // Meter is connected to UART1 on the pins above.
 HardwareSerial MeterSerial(1);
-// Trace/debug output goes to USB (Serial) on ESP32-S3.
-#define TraceSerial Serial
+// Trace/debug output goes to USB (Serial) on ESP32-S3 and into the log
+// bridge buffer (trace_tee.h).
+#define TraceSerial TraceLog
 //---------------------------------------------------------------------------
 // Un-comment ignored objects from ArduinoIgnore.h to improve performance
 // and memory usage.
@@ -1112,6 +1129,9 @@ static const char* className(uint16_t classId)
     case 22: return "ActionSchedule";
     case 23: return "HdlcSetup";
     case 40: return "PushSetup";
+    case 41: return "TcpUdpSetup";
+    case 42: return "Ipv4Setup";
+    case 43: return "MacAddrSetup";
     case 61: return "RegisterTable";
     case 63: return "StatusMapping";
     case 64: return "SecuritySetup";
@@ -1631,6 +1651,8 @@ void setup() {
                      METER_BAUD, METER_CLIENT_ADDRESS, (unsigned)serverAddress, (int)METER_AUTH);
   //BLE link to the mobile app.
   ble_begin(READ_INTERVAL_MS);
+  //EC200U for the log upload.
+  lb_begin();
 }
 
 void loop() {
@@ -1657,6 +1679,8 @@ void loop() {
     ret = com_readAllObjects("0.0.43.1.0.255", readProfiles);
     com_close();
     ble_readingEnd(ret);
+    //Meter UART is idle now: send this cycle's trace to the log server.
+    lb_upload();
   }
 }
 
