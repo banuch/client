@@ -1,0 +1,21 @@
+# systemd unit for the AMR data server.
+#   sudo cp amr-data.service /etc/systemd/system/
+#   (edit User and WorkingDirectory below)
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now amr-data
+#   journalctl -u amr-data -f
+[Unit]
+Description=AMR data server (meter readings + serial logs from ESP32)
+After=network.target
+
+[Service]
+Type=simple
+User=amr
+WorkingDirectory=/opt/amr-data/server
+ExecStart=/usr/bin/node src/server.js
+Restart=always
+RestartSec=5
+Environment=NODE_ENV=production
+
+[Install]
+WantedBy=multi-user.target

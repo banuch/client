@@ -14,10 +14,10 @@
 #include "trace_tee.h"
 
 // ── Firmware identity ───────────────────────────────────────────────────────
-#define FW_VERSION "2.0.0" // MAJOR.MINOR.PATCH -- bump before each release
+#define FW_VERSION "2.0.1" // MAJOR.MINOR.PATCH -- bump before each release
 
 // ── Debug output ────────────────────────────────────────────────────────────
-// OTA results go through the trace tee, so they also reach the log server.
+// OTA results go through the trace tee, so they also reach the data server.
 // Raw AT and HTTP traffic is printed on USB only, like the log bridge did.
 #define DEBUG_SERIAL TraceLog
 #define MODEM_DEBUG Serial
@@ -38,14 +38,14 @@
 // modem_epochSeconds()). 0 = treat the time as local and subtract tz.
 #define MODEM_CCLK_IS_UTC 1
 
-// ── Log bridge (log_bridge.ino) ─────────────────────────────────────────────
-// Everything printed on the USB serial port is also uploaded to the log
-// server after each read cycle. Server: server_new log receiver
-// (LOG_TCP_PORT). "" = upload off.
-#define LOG_SERVER_HOST ""                // e.g. "65.20.77.137"
-#define LOG_SERVER_PORT 5001
+// ── Data upload (reading_upload.ino, log_bridge.ino) ────────────────────────
+// After each read cycle the meter values and everything printed on the USB
+// serial port are sent to the data server (client/server, its TCP_PORT).
+// "" = upload off.
+#define DATA_SERVER_HOST ""               // e.g. "65.20.77.137"
+#define DATA_SERVER_PORT 5100
 #define LOG_DEVICE_ID ""                  // "" = IMEI (ESP-<MAC> until it is read)
-#define LOG_UPLOAD_MAX (128UL * 1024UL)   // most bytes sent per cycle
+#define LOG_UPLOAD_MAX (128UL * 1024UL)   // most log bytes sent per cycle
 
 // ── OTA server / timing defaults (NVS overrides) ────────────────────────────
 #define OTA_HOST_DEFAULT "65.20.77.137"
@@ -88,6 +88,16 @@
 #define OTA_BLE_TX_UUID "6e400003-b5a3-f393-e0a9-e50e24dcca9e" // device -> phone (notify)
 
 // ── Shared state (defined in the .ino files) ────────────────────────────────
+// One queued READING body (reading_upload.ino). Declared here so the
+// Arduino-generated prototypes can use it.
+struct RdItem
+{
+    uint32_t seq;
+    uint32_t readMs;
+    char* body;
+    size_t len;
+};
+
 struct DeviceConfig
 {
     String host;

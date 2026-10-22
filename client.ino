@@ -1470,10 +1470,12 @@ static int av_readValues()
       if (formatValue(e, &value, text, sizeof(text), &number, &unit))
       {
         ble_readingAddNumber(obis, obisName(e->ln), number, unit);
+        rd_addNumber(obis, obisName(e->ln), number, unit);
       }
       else
       {
         ble_readingAddText(obis, obisName(e->ln), text);
+        rd_addText(obis, obisName(e->ln), text);
       }
     }
     else if (ret == DLMS_ERROR_CODE_READ_WRITE_DENIED)
@@ -1682,11 +1684,14 @@ void loop() {
     runTime = millis();
     GXTRACE(GET_STR_FROM_EEPROM("Start reading"), NULL);
     ble_readingBegin();
+    rd_begin();
     //TODO: Change logical name of the frame counter if it's used.
     ret = com_readAllObjects("0.0.43.1.0.255", readProfiles);
     com_close();
     ble_readingEnd(ret);
-    //Meter UART is idle now: send this cycle's trace to the log server.
+    rd_end(ret);
+    //Meter UART is idle now: send this cycle's readings and trace to the
+    //data server.
     lb_upload();
   }
   //OTA runs between read cycles, never during one. A download blocks the

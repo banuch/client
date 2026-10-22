@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AMR Data</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="top">
+    <h1>AMR Data</h1>
+    <span id="updated" class="muted"></span>
+  </header>
+  <main class="layout">
+    <section class="devices">
+      <input id="search" type="search" placeholder="Search IMEI" aria-label="Search devices">
+      <ul id="device-list" class="device-list"></ul>
+      <p id="no-devices" class="muted" hidden>No device has sent data yet.</p>
+    </section>
+
+    <section class="detail" id="detail" hidden>
+      <div class="detail-head">
+        <h2 id="d-title"></h2>
+        <div id="d-meta" class="muted"></div>
+      </div>
+      <nav class="tabs" role="tablist">
+        <button role="tab" data-tab="latest" aria-selected="true">Latest</button>
+        <button role="tab" data-tab="history" aria-selected="false">History</button>
+        <button role="tab" data-tab="readings" aria-selected="false">Readings</button>
+        <button role="tab" data-tab="log" aria-selected="false">Log</button>
+      </nav>
+
+      <div class="tab" id="tab-latest">
+        <p id="latest-meta" class="muted"></p>
+        <input id="value-filter" type="search" placeholder="Filter OBIS or name" aria-label="Filter values">
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>OBIS</th><th>Name</th><th class="num">Value</th><th>Unit</th></tr></thead>
+            <tbody id="latest-body"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="tab" id="tab-history" hidden>
+        <div class="controls">
+          <select id="obis-select" aria-label="Value"></select>
+          <select id="range-select" aria-label="Range">
+            <option value="1">Last 24 h</option>
+            <option value="7" selected>Last 7 days</option>
+            <option value="30">Last 30 days</option>
+          </select>
+        </div>
+        <svg id="chart" class="chart" role="img" aria-label="Value over time"></svg>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Read at</th><th class="num">Value</th><th>Unit</th></tr></thead>
+            <tbody id="history-body"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="tab" id="tab-readings" hidden>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Read at</th><th>Received</th><th class="num">Values</th><th>Result</th><th>FW</th><th>Signed</th></tr></thead>
+            <tbody id="readings-body"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="tab" id="tab-log" hidden>
+        <div class="controls">
+          <select id="log-date" aria-label="Day"></select>
+          <button id="log-refresh" type="button">Refresh</button>
+          <span id="log-info" class="muted"></span>
+        </div>
+        <pre id="log-text" class="log"></pre>
+      </div>
+    </section>
+
+    <section class="detail empty" id="empty">
+      <p class="muted">Select a device.</p>
+    </section>
+  </main>
+  <script src="app.js"></script>
+</body>
+</html>
