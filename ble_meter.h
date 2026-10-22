@@ -30,8 +30,15 @@
 #define BLE_DATA_UUID     "beb5483e-36e1-4688-b7f5-ea07361b26a9"
 #define BLE_STATUS_UUID   "beb5483e-36e1-4688-b7f5-ea07361b26aa"
 
-// Start advertising as "DLMS-Meter-XXXX" (last 2 MAC bytes).
+class BLEServer;
+
+// Create the BLE server and the meter service as "DLMS-Meter-XXXX" (last 2
+// MAC bytes). Other services (ota_ble.ino) are added to ble_server() before
+// ble_startAdvertising() is called.
 void ble_begin(uint32_t readIntervalMs);
+void ble_startAdvertising();
+BLEServer* ble_server();
+bool ble_isConnected();
 
 // Call every loop(): restarts advertising after a disconnect, answers
 // "get" and "status" requests.

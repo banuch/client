@@ -235,12 +235,32 @@ void ble_begin(uint32_t readIntervalMs)
   g_status->addDescriptor(new BLE2902());
   service->start();
   publishStatus();
+  TraceLog.printf("\r\nBLE server %s\r\n", name);
+}
 
+void ble_startAdvertising()
+{
+  if (g_server == NULL)
+  {
+    return;
+  }
+  //Only the meter service UUID is advertised: two 128-bit UUIDs do not fit.
+  //The OTA service is found after connecting.
   BLEAdvertising* adv = BLEDevice::getAdvertising();
   adv->addServiceUUID(BLE_SERVICE_UUID);
   adv->setScanResponse(true);
   BLEDevice::startAdvertising();
-  TraceLog.printf("\r\nBLE advertising as %s\r\n", name);
+  TraceLog.print("\r\nBLE advertising\r\n");
+}
+
+BLEServer* ble_server()
+{
+  return g_server;
+}
+
+bool ble_isConnected()
+{
+  return g_connected;
 }
 
 void ble_poll()

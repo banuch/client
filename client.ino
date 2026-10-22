@@ -31,8 +31,10 @@
 // This code is licensed under the GNU General Public License v2.
 // Full text may be retrieved at http://www.gnu.org/licenses/gpl-2.0.txt
 //---------------------------------------------------------------------------
+#include "config.h"
 #include <EEPROM.h>
 #include <HardwareSerial.h>
+#include <esp_ota_ops.h>
 #include "GXDLMSClient.h"
 #include "include/dlms.h"
 #include "obis_names.h"
@@ -69,20 +71,7 @@
 // 1 = print every sent/received HDLC frame in hex.
 #define METER_TRACE_FRAMES    0
 
-// Log bridge (log_bridge.ino): everything printed on the USB serial port is
-// also uploaded to the log server after each read cycle, over the EC200U.
-// Server: server_new log receiver (LOG_TCP_PORT). "" = upload off.
-#define LOG_SERVER_HOST   ""                 // e.g. "65.20.77.137"
-#define LOG_SERVER_PORT   5001
-#define LOG_DEVICE_ID     ""                 // "" = ESP-<last 3 MAC bytes>
-#define LOG_APN           "airtelgprs.com"
-#define LOG_UPLOAD_MAX    (128UL * 1024UL)   // most bytes sent per cycle
-
-// EC200U modem on UART2 (same board as dlms_client).
-#define MODEM_TX_PIN      17
-#define MODEM_RX_PIN      18
-#define MODEM_WAKE_PIN    10
-#define MODEM_BAUD        9600
+// Log upload, EC200U modem and OTA settings are in config.h.
 
 // 1 = run a loopback test instead of talking to the meter.
 //     Short RS-232 pins 2 and 3 on the meter-side connector before enabling.
@@ -1649,10 +1638,26 @@ void setup() {
   TraceSerial.printf("\r\nMeter UART1 RX=%d TX=%d DTR=%d (level %d), %d baud, client %d, server %u, auth %d\r\n",
                      RXD1_DEFAULT, TXD1_DEFAULT, DTR_PIN_DEFAULT, DTR_ACTIVE_LEVEL,
                      METER_BAUD, METER_CLIENT_ADDRESS, (unsigned)serverAddress, (int)METER_AUTH);
-  //BLE link to the mobile app.
+  //BLE link to the mobile app, plus the OTA command service on the same server.
   ble_begin(READ_INTERVAL_MS);
-  //EC200U for the log upload.
+  otaBle_init();
+  ble_startAdvertising();
+
+  //EC200U, shared by the log upload and OTA. If an update was just applied,
+  //tell the OTA server whether the new image booted.
+  const esp_partition_t* run = esp_ota_get_running_partition();
+  TraceSerial.printf("\r\nFirmware %s (partition %s)\r\n", FW_VERSION, run ? run->label : "?");
+  cfg_load();
+  modem_hwInit();
+  g_ota.modemReady = modem_init();
+  if (g_ota.modemReady)
+  {
+    ota_reportBootResult();
+  }
   lb_begin();
+  //First OTA check after the boot read and its log upload.
+  g_ota.nextCheckMs = millis() + BOOT_CHECK_DELAY_MS;
+  TraceSerial.print("Type HELP for OTA commands.\r\n");
 }
 
 void loop() {
@@ -1663,7 +1668,9 @@ void loop() {
   return;
 #endif
   static bool firstRun = true;
+  cmd_pollSerial();
   ble_poll();
+  otaBle_poll();
   //Read on boot, on the auto-read interval, or when the app asks for it.
   bool bleRequest = ble_takeReadRequest();
   if (firstRun || bleRequest || millis() - runTime >= ble_readIntervalMs())
@@ -1681,6 +1688,12 @@ void loop() {
     ble_readingEnd(ret);
     //Meter UART is idle now: send this cycle's trace to the log server.
     lb_upload();
+  }
+  //OTA runs between read cycles, never during one. A download blocks the
+  //loop (meter reads and BLE wait) and reboots into the new image on success.
+  if (!g_ota.busy && ota_isDue())
+  {
+    ota_run();
   }
 }
 

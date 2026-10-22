@@ -9,6 +9,9 @@ rem    build.bat COM5         compile + upload + monitor on COM5
 rem    build.bat COM5 compile only compile
 rem    build.bat COM5 upload  compile + upload
 rem    build.bat COM5 monitor only open the serial monitor
+rem
+rem  Every compile also copies the OTA image to
+rem    release\amr_client_<FW_VERSION>.bin
 rem ===========================================================================
 
 set "FQBN=esp32:esp32:esp32s3:USBMode=hwcdc,CDCOnBoot=cdc,FlashMode=qio,FlashSize=16M,PartitionScheme=app3M_fat9M_16MB,PSRAM=opi"
@@ -17,6 +20,7 @@ rem Sketch folder = folder of this batch file (without trailing backslash).
 set "SKETCH=%~dp0."
 rem Build outside OneDrive so sync does not lock the build files.
 set "BUILD=%TEMP%\dlms_client_s3_build"
+set "RELEASE=%~dp0release"
 
 set "PORT=%~1"
 set "MODE=%~2"
@@ -37,6 +41,23 @@ arduino-cli compile --fqbn "%FQBN%" --build-path "%BUILD%" "%SKETCH%"
 if errorlevel 1 (
   echo [ERROR] Compile failed.
   goto :fail
+)
+
+rem -- Release copy: name the OTA image after FW_VERSION in config.h ----------
+set "FWVER="
+for /f "tokens=3" %%V in ('findstr /r /c:"^#define  *FW_VERSION " "%SKETCH%\config.h"') do set "FWVER=%%~V"
+if "%FWVER%"=="" (
+  echo [WARN] FW_VERSION not found in config.h - release copy skipped.
+) else (
+  if not exist "%RELEASE%" mkdir "%RELEASE%"
+  copy /y "%BUILD%\client.ino.bin" "%RELEASE%\amr_client_%FWVER%.bin" >nul
+  if errorlevel 1 (
+    echo [WARN] Could not copy the .bin to %RELEASE%
+  ) else (
+    echo.
+    echo OTA image: %RELEASE%\amr_client_%FWVER%.bin
+    echo Upload it on the dashboard as version %FWVER%
+  )
 )
 if /i "%MODE%"=="compile" goto :done
 
