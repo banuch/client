@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node src/server.js",
     "test": "node --test",
-    "send-sample": "node tools/send-sample.js"
+    "send-sample": "node tools/send-sample.js",
+    "check": "node tools/check-receive.js"
   },
   "type": "commonjs",
   "dependencies": {

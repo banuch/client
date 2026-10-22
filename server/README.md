@@ -21,7 +21,28 @@ cp .env.example .env      # set VIEW_PASSWORD and MASTER_SECRET
 npm start
 npm test                  # unit + end-to-end tests
 npm run send-sample       # act as a device: one reading + one log
+npm run check             # is the server receiving packets? (see below)
 ```
+
+### Checking that packets arrive
+
+`tools/check-receive.js` sends one READING and one LOG as a device would, then
+reads them back through the API. Each step prints PASS or FAIL with the reason;
+the exit code is 0 only if all passed. On the server itself `npm run check` is
+enough (settings come from `.env`). From another machine:
+
+```bash
+node tools/check-receive.js --host 65.20.77.137 --pass <VIEW_PASSWORD> --secret <MASTER_SECRET>
+```
+
+| Option | Default |
+|---|---|
+| `--host` | 127.0.0.1 |
+| `--port` / `--http` | `TCP_PORT` / `HTTP_PORT` (5100 / 5101) |
+| `--user` / `--pass` | `VIEW_USER` / `VIEW_PASSWORD` |
+| `--secret` | `MASTER_SECRET` (`""` sends unsigned) |
+| `--device` | `TEST-CHECK` (shows up as a device on the page) |
+| `--no-api` | only check the TCP side (when port 5101 is not reachable) |
 
 Open `http://<host>:5101/` and log in with `VIEW_USER` / `VIEW_PASSWORD`.
 Without `VIEW_PASSWORD` the page has no login and only listens on 127.0.0.1.
