@@ -64,9 +64,9 @@
 #define METER_PASSWORD        "Hello"
 #define METER_RX_BUFFER_SIZE  2048
 
-// Time between meter readings (start to start). Default as in dlms_client.
-// The first reading is done right after boot.
-#define READ_INTERVAL_MS      (300UL * 1000UL)   // 300 s = 5 min
+// When meter readings and profiles are read: schedule.ino, intervals in
+// config.h / NVS (set over BLE or SET read=... profile=...). The first
+// reading is done right after boot.
 
 // 1 = print every sent/received HDLC frame in hex.
 #define METER_TRACE_FRAMES    0
@@ -97,6 +97,17 @@ typedef struct
   signed char attr;
   uint16_t dataIndex;
 } PgColumn;
+
+// What a profile generic is, for scheduling and upload (profiles.ino).
+enum PgKind
+{
+  PG_OTHER,
+  PG_INSTANT,
+  PG_BLOCK,
+  PG_DAILY,
+  PG_BILLING,
+  PG_EVENT
+};
 
 // Emulated EEPROM size in flash (ESP32 has no real EEPROM).
 #define EEPROM_SIZE_BYTES 4096
@@ -215,8 +226,6 @@ void GXTRACE_BB(const char* str, gxByteBuffer* value)
   }
   TraceSerial.write("\0");
 }
-
-uint32_t runTime = 0;
 
 ///////////////////////////////////////////////////////////////////////
 //Returns the approximate processor time in ms.
@@ -1503,9 +1512,10 @@ static int av_readValues()
   return ret;
 }
 
-//This function reads ALL objects that meter have. It will loop all object's attributes.
-//readProfiles also reads every profile generic (profiles.ino), which is slow.
-int com_readAllObjects(const char* invocationCounter, bool readProfiles)
+//One read cycle. flags (CYCLE_* in config.h) say what: the meter readings
+//(every value object) and/or profiles (profiles.ino). The meter clock is
+//read every cycle; it drives the schedule (schedule.ino).
+int com_readAllObjects(const char* invocationCounter, uint8_t flags)
 {
   int ret;
   if (invocationCounter != NULL)
@@ -1549,10 +1559,26 @@ int com_readAllObjects(const char* invocationCounter, bool readProfiles)
     av_print();
     g_avLoaded = true;
   }
-  ret = av_readValues();
-  if (readProfiles && !isLinkError(ret))
+  unsigned char now[12];
+  bool nowValid;
+  ret = pg_readClock(now, &nowValid);
+  if (isLinkError(ret))
   {
-    ret = pg_readAll();
+    return ret;
+  }
+  uint32_t nowS;
+  if (nowValid && pg_clockSeconds(now, &nowS))
+  {
+    sched_syncClock(nowS);
+  }
+  ret = 0;
+  if (flags & (CYCLE_VALUES | CYCLE_FULL))
+  {
+    ret = av_readValues();
+  }
+  if ((flags & (CYCLE_PROFILES | CYCLE_DAILY | CYCLE_FULL)) && !isLinkError(ret))
+  {
+    ret = pg_readCycle(flags, now, nowValid);
   }
   return ret;
 }
@@ -1640,8 +1666,13 @@ void setup() {
   TraceSerial.printf("\r\nMeter UART1 RX=%d TX=%d DTR=%d (level %d), %d baud, client %d, server %u, auth %d\r\n",
                      RXD1_DEFAULT, TXD1_DEFAULT, DTR_PIN_DEFAULT, DTR_ACTIVE_LEVEL,
                      METER_BAUD, METER_CLIENT_ADDRESS, (unsigned)serverAddress, (int)METER_AUTH);
+  //Settings in NVS: OTA server, read intervals, ...
+  cfg_load();
+  TraceSerial.printf("\r\nMeter readings every %lu s, profiles every %lu min, daily load after midnight\r\n",
+                     (unsigned long)g_cfg.readS, (unsigned long)g_cfg.profileMin);
   //BLE link to the mobile app, plus the OTA command service on the same server.
-  ble_begin(READ_INTERVAL_MS);
+  ble_begin();
+  ble_setSettings(g_cfg.readS, g_cfg.profileMin);
   otaBle_init();
   ble_startAdvertising();
 
@@ -1649,7 +1680,6 @@ void setup() {
   //tell the OTA server whether the new image booted.
   const esp_partition_t* run = esp_ota_get_running_partition();
   TraceSerial.printf("\r\nFirmware %s (partition %s)\r\n", FW_VERSION, run ? run->label : "?");
-  cfg_load();
   modem_hwInit();
   g_ota.modemReady = modem_init();
   if (g_ota.modemReady)
@@ -1673,23 +1703,48 @@ void loop() {
   cmd_pollSerial();
   ble_poll();
   otaBle_poll();
-  //Read on boot, on the auto-read interval, or when the app asks for it.
-  bool bleRequest = ble_takeReadRequest();
-  if (firstRun || bleRequest || millis() - runTime >= ble_readIntervalMs())
+  //Interval changes from the BLE app: checked and saved like SET read=/profile=.
+  uint32_t setting;
+  if (ble_takeIntervalRequest(&setting))
   {
-    //Profiles are read on boot and when the app asks, not on the auto-read
-    //interval: block load, billing and events take a while at 9600 baud.
-    bool readProfiles = firstRun || bleRequest;
+    String err = cfg_set("read", String(setting));
+    TraceSerial.printf("\r\nBLE: meter reading interval %lu s %s%s\r\n", (unsigned long)setting,
+                       err.length() ? "rejected: " : "saved", err.c_str());
+    ble_setSettings(g_cfg.readS, g_cfg.profileMin);
+  }
+  if (ble_takeProfileRequest(&setting))
+  {
+    String err = cfg_set("profile", String(setting));
+    TraceSerial.printf("\r\nBLE: profile read interval %lu min %s%s\r\n", (unsigned long)setting,
+                       err.length() ? "rejected: " : "saved", err.c_str());
+    ble_setSettings(g_cfg.readS, g_cfg.profileMin);
+  }
+  //Everything on boot and when the app asks; otherwise what the schedule
+  //says is due (schedule.ino).
+  bool bleRequest = ble_takeReadRequest();
+  uint8_t flags = firstRun || bleRequest ? CYCLE_ALL : sched_due();
+  if (flags != 0)
+  {
     firstRun = false;
-    runTime = millis();
     GXTRACE(GET_STR_FROM_EEPROM("Start reading"), NULL);
-    ble_readingBegin();
+    TraceSerial.printf("[SCHED] Cycle:%s%s%s%s\r\n", (flags & CYCLE_FULL) ? " full" : "",
+                       (flags & CYCLE_VALUES) ? " readings" : "", (flags & CYCLE_PROFILES) ? " profiles" : "",
+                       (flags & CYCLE_DAILY) ? " daily" : "");
+    bool values = (flags & (CYCLE_VALUES | CYCLE_FULL)) != 0;
+    if (values)
+    {
+      ble_readingBegin();
+    }
     rd_begin();
     //TODO: Change logical name of the frame counter if it's used.
-    ret = com_readAllObjects("0.0.43.1.0.255", readProfiles);
+    ret = com_readAllObjects("0.0.43.1.0.255", flags);
     com_close();
-    ble_readingEnd(ret);
+    if (values)
+    {
+      ble_readingEnd(ret);
+    }
     rd_end(ret);
+    sched_done(flags, ret == 0);
     //Meter UART is idle now: send this cycle's readings and trace to the
     //data server.
     lb_upload();

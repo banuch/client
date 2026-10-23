@@ -7,7 +7,10 @@
 //             {"cmd":"read"}             read the meter now and stream values
 //             {"cmd":"get"}              stream the last cached reading
 //             {"cmd":"status"}           notify the current status
-//             {"cmd":"interval","s":300} auto-read interval in seconds (RAM only)
+//             {"cmd":"interval","s":900} meter reading interval in seconds,
+//                                        30..86400 (saved in flash)
+//             {"cmd":"profile","m":30}   profile read interval in minutes,
+//                                        5..1440, must divide a day (saved)
 //    data     beb5483e-36e1-4688-b7f5-ea07361b26a9  Notify
 //             Newline-terminated JSON lines, split into MTU sized chunks:
 //             {"t":"begin","src":"meter"|"cache"}
@@ -16,7 +19,8 @@
 //             {"t":"end","ret":0,"n":42}
 //    status   beb5483e-36e1-4688-b7f5-ea07361b26aa  Read + Notify
 //             {"t":"status","state":"idle"|"reading"|"error","ret":0,
-//              "n":42,"age":12,"interval":300}
+//              "n":42,"age":12,"interval":900,"profile":30}
+//             A rejected interval/profile value leaves the old one in the status.
 //
 //  BLE callbacks only set flags. All meter and BLE data work runs in loop().
 // =============================================================================
@@ -35,7 +39,7 @@ class BLEServer;
 // Create the BLE server and the meter service as "DLMS-Meter-XXXX" (last 2
 // MAC bytes). Other services (ota_ble.ino) are added to ble_server() before
 // ble_startAdvertising() is called.
-void ble_begin(uint32_t readIntervalMs);
+void ble_begin();
 void ble_startAdvertising();
 BLEServer* ble_server();
 bool ble_isConnected();
@@ -47,8 +51,13 @@ void ble_poll();
 // True once after the app sent {"cmd":"read"}.
 bool ble_takeReadRequest();
 
-// Auto-read interval, can be changed from the app.
-uint32_t ble_readIntervalMs();
+// Interval changes sent by the app, once each: true and the requested value.
+// loop() validates and saves them (cfg_set) and calls ble_setSettings().
+bool ble_takeIntervalRequest(uint32_t* seconds);
+bool ble_takeProfileRequest(uint32_t* minutes);
+
+// Current settings for the status characteristic.
+void ble_setSettings(uint32_t readS, uint32_t profileMin);
 
 // A meter reading cycle: begin, one add per value, end.
 void ble_readingBegin();

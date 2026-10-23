@@ -14,7 +14,7 @@
 #include "trace_tee.h"
 
 // ── Firmware identity ───────────────────────────────────────────────────────
-#define FW_VERSION "2.0.1" // MAJOR.MINOR.PATCH -- bump before each release
+#define FW_VERSION "2.0.2" // MAJOR.MINOR.PATCH -- bump before each release
 
 // ── Debug output ────────────────────────────────────────────────────────────
 // OTA results go through the trace tee, so they also reach the data server.
@@ -42,10 +42,29 @@
 // After each read cycle the meter values and everything printed on the USB
 // serial port are sent to the data server (client/server, its TCP_PORT).
 // "" = upload off.
-#define DATA_SERVER_HOST ""               // e.g. "65.20.77.137"
+#define DATA_SERVER_HOST "65.20.77.137"
 #define DATA_SERVER_PORT 5100
 #define LOG_DEVICE_ID ""                  // "" = IMEI (ESP-<MAC> until it is read)
 #define LOG_UPLOAD_MAX (128UL * 1024UL)   // most log bytes sent per cycle
+
+// ── Read schedule (schedule.ino; NVS overrides, set over BLE or SET) ────────
+// Meter readings (register values) every READ_INTERVAL_DEFAULT_S. Profiles
+// (instantaneous, block load, billing, event logs) every
+// PROFILE_INTERVAL_DEFAULT_MIN. Daily load once a day, after midnight. Both
+// are aligned to the meter clock (e.g. 30 min = hh:00 and hh:30) plus
+// SCHED_DELAY_S, so the meter has closed its block first.
+#define READ_INTERVAL_DEFAULT_S 900UL       // 15 min
+#define READ_INTERVAL_MIN_S 30UL
+#define PROFILE_INTERVAL_DEFAULT_MIN 30UL
+#define PROFILE_INTERVAL_MIN_MIN 5UL        // also must divide 1440 (a day)
+#define SCHED_DELAY_S 60UL
+
+// What a read cycle does (schedule.ino decides, client.ino/profiles.ino read).
+#define CYCLE_VALUES   0x01 // meter readings (register values)
+#define CYCLE_PROFILES 0x02 // instantaneous, block load, billing, event logs
+#define CYCLE_DAILY    0x04 // daily load profile
+#define CYCLE_FULL     0x08 // every profile, tables printed (boot, BLE "read")
+#define CYCLE_ALL      (CYCLE_VALUES | CYCLE_PROFILES | CYCLE_DAILY | CYCLE_FULL)
 
 // ── OTA server / timing defaults (NVS overrides) ────────────────────────────
 #define OTA_HOST_DEFAULT "65.20.77.137"
@@ -78,6 +97,8 @@
 #define K_INTERVAL "interval"
 #define K_APN "apn"
 #define K_PENDING_VER "pend_ver" // set before reboot into a new image
+#define K_READ "read_s"           // meter reading interval, seconds
+#define K_PROFILE "prof_min"      // profile read interval, minutes
 #define K_REG_KEY "reg_key"      // registration key pair (32 priv + 65 pub), until a key arrives
 
 // ── BLE OTA command service (Nordic UART style, ota_ble.ino) ────────────────
@@ -88,6 +109,16 @@
 #define OTA_BLE_TX_UUID "6e400003-b5a3-f393-e0a9-e50e24dcca9e" // device -> phone (notify)
 
 // ── Shared state (defined in the .ino files) ────────────────────────────────
+// "Last sent" marker of one profile (profiles.ino): meter-local seconds of
+// the newest row that went into a reading. Saved to NVS once that reading
+// got SEND OK.
+#define PG_MARK_MAX 12
+struct PgMark
+{
+    char key[16];
+    uint32_t ts;
+};
+
 // One queued READING body (reading_upload.ino). Declared here so the
 // Arduino-generated prototypes can use it.
 struct RdItem
@@ -96,6 +127,8 @@ struct RdItem
     uint32_t readMs;
     char* body;
     size_t len;
+    PgMark marks[PG_MARK_MAX];   // committed when this item is sent
+    uint8_t markCount;
 };
 
 struct DeviceConfig
@@ -105,6 +138,8 @@ struct DeviceConfig
     String secret; // device key, 64 hex chars ("" = not provisioned)
     uint32_t intervalS;
     String apn;
+    uint32_t readS;      // meter reading interval
+    uint32_t profileMin; // profile read interval
 };
 extern DeviceConfig g_cfg;
 

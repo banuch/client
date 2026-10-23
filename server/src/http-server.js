@@ -7,10 +7,14 @@
 //    GET /api/devices/:id/latest                       latest reading with values
 //    GET /api/devices/:id/readings?from=&to=&limit=    reading list (no values)
 //    GET /api/devices/:id/readings?obis=&from=&to=&limit=   one value over time
+//    GET /api/devices/:id/profiles                     profiles the device sent (columns, row count)
+//    GET /api/devices/:id/profiles/:obis?from=&to=&limit=   rows of one profile, newest first
 //    GET /api/devices/:id/log-dates                    days that have a log file
 //    GET /api/devices/:id/logs?date=YYYY-MM-DD&tail=N  end of one day's log (text)
 //
 //  from / to: epoch milliseconds or an ISO date. Times in replies are epoch ms.
+//  Profile rows are the exception: their time t is the meter's local time as
+//  text, and from / to filter on it ("YYYY-MM-DD" or "YYYY-MM-DD hh:mm[:ss]").
 //
 //  Login: HTTP Basic with VIEW_USER / VIEW_PASSWORD. Without a password the
 //  page has no login and config.js binds it to 127.0.0.1 only. After
@@ -22,6 +26,16 @@ const express = require('express');
 
 const DEVICE_ID = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$/;
 const OBIS = /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/;
+const ROW_TIME = /^\d{4}-\d\d-\d\d( \d\d:\d\d(:\d\d)?)?$/;
+
+/** A profile row time bound, null if absent, undefined if malformed. A bare date as "to" includes that day. */
+function parseRowTime(v, isTo) {
+  if (v === undefined || v === '') return null;
+  const s = String(v);
+  if (!ROW_TIME.test(s)) return undefined;
+  if (s.length === 10) return isTo ? `${s} 23:59:59` : `${s} 00:00:00`;
+  return s.length === 16 ? `${s}:${isTo ? '59' : '00'}` : s;
+}
 
 function safeEqual(a, b) {
   // Hash first so the compare does not leak the length.
@@ -113,6 +127,19 @@ function createHttpApp(cfg, { db, logs }) {
       return res.json(db.history({ ...p, obis: String(req.query.obis) }));
     }
     res.json(db.readings(p));
+  });
+
+  api.get('/devices/:id/profiles', (req, res) => res.json(db.profiles(req.params.id)));
+
+  api.get('/devices/:id/profiles/:obis', (req, res) => {
+    if (!OBIS.test(req.params.obis)) return res.status(400).json({ error: 'bad_obis' });
+    const from = parseRowTime(req.query.from, false);
+    const to = parseRowTime(req.query.to, true);
+    if (from === undefined || to === undefined) return res.status(400).json({ error: 'bad_time' });
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 500, 1), 5000);
+    const p = db.profileRows({ deviceId: req.params.id, obis: req.params.obis, from, to, limit });
+    if (!p) return res.status(404).json({ error: 'unknown_profile' });
+    res.json(p);
   });
 
   api.get('/devices/:id/log-dates', (req, res) => res.json(logs.dates(req.params.id)));

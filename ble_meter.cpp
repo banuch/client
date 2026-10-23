@@ -9,8 +9,6 @@
 #include <esp_mac.h>
 #include <vector>
 
-// Smallest auto-read interval the app may set.
-#define BLE_MIN_INTERVAL_S   30
 // Pause between notifications so the BLE stack queue does not overflow.
 #define BLE_NOTIFY_GAP_MS    8
 // Longest JSON line (name + text value + keys).
@@ -36,7 +34,10 @@ static volatile bool g_wasConnected = false;
 static volatile bool g_readRequest = false;
 static volatile bool g_getRequest = false;
 static volatile bool g_statusRequest = false;
-static volatile uint32_t g_intervalMs = 300000UL;
+static volatile int32_t g_intervalReq = -1;   // -1 = none
+static volatile int32_t g_profileReq = -1;
+static uint32_t g_readS = 0;
+static uint32_t g_profileMin = 0;
 
 // Last complete reading. Only used from loop().
 static std::vector<BleReading> g_cache;
@@ -144,10 +145,12 @@ static void publishStatus()
   }
   const char* state = g_reading ? "reading" : (g_lastRet != 0 ? "error" : "idle");
   long age = g_hasReading ? (long)((millis() - g_lastReadMs) / 1000) : -1;
-  char line[128];
+  char line[160];
   snprintf(line, sizeof(line),
-           "{\"t\":\"status\",\"state\":\"%s\",\"ret\":%d,\"n\":%u,\"age\":%ld,\"interval\":%lu}",
-           state, g_lastRet, (unsigned)g_cache.size(), age, (unsigned long)(g_intervalMs / 1000));
+           "{\"t\":\"status\",\"state\":\"%s\",\"ret\":%d,\"n\":%u,\"age\":%ld,\"interval\":%lu,"
+           "\"profile\":%lu}",
+           state, g_lastRet, (unsigned)g_cache.size(), age, (unsigned long)g_readS,
+           (unsigned long)g_profileMin);
   g_status->setValue((uint8_t*)line, strlen(line));
   if (g_connected)
   {
@@ -192,15 +195,15 @@ class CommandCallbacks : public BLECharacteristicCallbacks
     else if (cmd.indexOf("\"interval\"") >= 0)
     {
       int pos = cmd.indexOf("\"s\":");
-      if (pos >= 0)
-      {
-        long s = cmd.substring(pos + 4).toInt();
-        if (s >= BLE_MIN_INTERVAL_S)
-        {
-          g_intervalMs = (uint32_t)s * 1000UL;
-        }
-      }
-      g_statusRequest = true;
+      long s = pos >= 0 ? cmd.substring(pos + 4).toInt() : 0;
+      //Checked and saved in loop(); the status follows from there.
+      g_intervalReq = s > 0 && s <= 0x7FFFFFFFL ? (int32_t)s : 0;
+    }
+    else if (cmd.indexOf("\"profile\"") >= 0)
+    {
+      int pos = cmd.indexOf("\"m\":");
+      long m = pos >= 0 ? cmd.substring(pos + 4).toInt() : 0;
+      g_profileReq = m > 0 && m <= 0x7FFFFFFFL ? (int32_t)m : 0;
     }
   }
 };
@@ -209,9 +212,8 @@ class CommandCallbacks : public BLECharacteristicCallbacks
 // Public API
 //---------------------------------------------------------------------------
 
-void ble_begin(uint32_t readIntervalMs)
+void ble_begin()
 {
-  g_intervalMs = readIntervalMs;
   uint8_t mac[6];
   esp_read_mac(mac, ESP_MAC_BT);
   char name[24];
@@ -300,9 +302,35 @@ bool ble_takeReadRequest()
   return false;
 }
 
-uint32_t ble_readIntervalMs()
+bool ble_takeIntervalRequest(uint32_t* seconds)
 {
-  return g_intervalMs;
+  int32_t v = g_intervalReq;
+  if (v < 0)
+  {
+    return false;
+  }
+  g_intervalReq = -1;
+  *seconds = (uint32_t)v;
+  return true;
+}
+
+bool ble_takeProfileRequest(uint32_t* minutes)
+{
+  int32_t v = g_profileReq;
+  if (v < 0)
+  {
+    return false;
+  }
+  g_profileReq = -1;
+  *minutes = (uint32_t)v;
+  return true;
+}
+
+void ble_setSettings(uint32_t readS, uint32_t profileMin)
+{
+  g_readS = readS;
+  g_profileMin = profileMin;
+  publishStatus();
 }
 
 void ble_readingBegin()

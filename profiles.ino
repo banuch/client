@@ -10,14 +10,34 @@
 //  Read strategy. Avon meters ignore selective access by entry and send the
 //  whole buffer (see dlms_client/assoc_view.ino), so:
 //    - capture_period > 0 and column 1 is the clock (block load, daily
-//      load): selective access by date range for the last
-//      PG_WINDOW_PERIODS periods, at least PG_MIN_WINDOW_S.
+//      load): selective access by date range, from the newest row already
+//      sent (marker) to now. Without a marker, and always on a full read,
+//      the last PG_WINDOW_PERIODS periods, at least PG_MIN_WINDOW_S. Never
+//      further back than PG_MAX_BACK_S or PG_MAX_NEW_ROWS periods.
 //    - otherwise (billing, events, snapshots): plain read of the buffer,
 //      skipped when entries_in_use is above PG_PLAIN_MAX_ROWS.
+//
+//  Which profiles a cycle reads (CYCLE_* in config.h, schedule.ino decides):
+//    CYCLE_PROFILES  instantaneous, block load, billing, event logs
+//    CYCLE_DAILY     daily load
+//    CYCLE_FULL      all of them (also name plate and any other profile),
+//                    with every row printed. Other cycles print one line
+//                    per profile, so the uploaded log stays small.
+//
+//  Upload (reading_upload.ino, rd_profile*):
+//    block load, daily load, event logs  rows newer than the profile's marker
+//    billing                             the current (newest) row every time,
+//                                        closed months newer than the marker
+//    instantaneous, name plate, others   every row read
+//  Markers ("m<a>_<b>_<c>_<d>_<e>" in NVS, mk_get/mk_advance) hold the
+//  timestamp of the newest row sent, so a power cut or network outage is
+//  filled in by the next cycle.
 // =============================================================================
 
 #define PG_MIN_WINDOW_S     (24UL * 3600UL)   // block load: last 24 h
 #define PG_WINDOW_PERIODS   7                 // daily load: last 7 days
+#define PG_MAX_BACK_S       (7UL * 86400UL)   // longest catch-up after an outage
+#define PG_MAX_NEW_ROWS     400UL             // ... and at most this many periods
 #define PG_PLAIN_MAX_ROWS   400
 #define PG_TABLE_MAX_COLS   16
 
@@ -556,8 +576,240 @@ static int pg_readUInt(const unsigned char* ln, unsigned char attr, uint32_t* ou
   return ret;
 }
 
-//Read and print one profile. Only link errors are returned.
-static int pg_readProfile(const AvEntry* p, const unsigned char* now, bool nowValid)
+static PgKind pg_kind(const unsigned char* ln)
+{
+  static const struct
+  {
+    unsigned char ln[6];
+    PgKind kind;
+  } KINDS[] =
+  {
+    {{1, 0, 94, 91, 0, 255}, PG_INSTANT},
+    {{1, 0, 99, 1, 0, 255},  PG_BLOCK},
+    {{1, 0, 99, 2, 0, 255},  PG_DAILY},
+    {{1, 0, 98, 1, 0, 255},  PG_BILLING},
+  };
+  for (size_t pos = 0; pos != sizeof(KINDS) / sizeof(KINDS[0]); ++pos)
+  {
+    if (memcmp(ln, KINDS[pos].ln, 6) == 0)
+    {
+      return KINDS[pos].kind;
+    }
+  }
+  if (ln[0] == 0 && ln[1] == 0 && ln[2] == 99 && ln[3] == 98 && ln[5] == 255)
+  {
+    return PG_EVENT;
+  }
+  return PG_OTHER;
+}
+
+//Is a profile of this kind read in a cycle with these flags?
+static bool pg_wanted(PgKind kind, uint8_t flags)
+{
+  if (flags & CYCLE_FULL)
+  {
+    return true;
+  }
+  switch (kind)
+  {
+    case PG_INSTANT:
+    case PG_BLOCK:
+    case PG_BILLING:
+    case PG_EVENT:
+      return (flags & CYCLE_PROFILES) != 0;
+    case PG_DAILY:
+      return (flags & CYCLE_DAILY) != 0;
+    default:
+      return false;
+  }
+}
+
+//Profiles whose rows are sent once (marker kept).
+static bool pg_hasMarker(PgKind kind)
+{
+  return kind == PG_BLOCK || kind == PG_DAILY || kind == PG_BILLING || kind == PG_EVENT;
+}
+
+static void pg_markKey(const unsigned char* ln, char* key, size_t size)
+{
+  snprintf(key, size, "m%u_%u_%u_%u_%u", ln[0], ln[1], ln[2], ln[3], ln[4]);
+}
+
+//Meter local seconds -> "YYYY-MM-DD hh:mm:ss".
+static void pg_tsText(uint32_t t, char* buff, size_t size)
+{
+  uint16_t y;
+  uint8_t m, d;
+  civilFromDays((int32_t)(t / 86400UL), &y, &m, &d);
+  uint32_t s = t % 86400UL;
+  snprintf(buff, size, "%04u-%02u-%02u %02u:%02u:%02u", (unsigned)y, (unsigned)m, (unsigned)d,
+           (unsigned)(s / 3600), (unsigned)(s / 60 % 60), (unsigned)(s % 60));
+}
+
+//Timestamp of a row: column 1 when it is a date-time. A clock column left
+//empty by the meter follows from the previous row plus the capture period.
+static bool pg_rowTime(const PgColumn* cols, uint16_t count, dlmsVARIANT* row, uint32_t period,
+                       uint32_t* prevTs, bool* havePrev, uint32_t* ts)
+{
+  dlmsVARIANT* v = NULL;
+  if (count == 0 || row->Arr->size == 0 || va_getByIndex(row->Arr, 0, &v) != 0)
+  {
+    return false;
+  }
+  if (isDateTimeCell(v) && dtToSeconds(v->byteArr->data, ts))
+  {
+    *prevTs = *ts;
+    *havePrev = true;
+    return true;
+  }
+  if (cols[0].e.classId == DLMS_OBJECT_TYPE_CLOCK && *havePrev && period != 0)
+  {
+    *prevTs += period;
+    *ts = *prevTs;
+    return true;
+  }
+  return false;
+}
+
+//Queue the rows to upload (see the header) and advance the marker.
+//Returns the number of rows queued.
+static uint16_t pg_collect(const AvEntry* p, PgKind kind, const PgColumn* cols, uint16_t count,
+                           dlmsVARIANT* buffer, uint32_t period, uint32_t mark, uint32_t nowS)
+{
+  if (buffer->vt != DLMS_DATA_TYPE_ARRAY || buffer->Arr == NULL || count == 0)
+  {
+    return 0;
+  }
+  uint16_t rows = (uint16_t)buffer->Arr->size;
+  uint32_t* times = (uint32_t*)malloc(sizeof(uint32_t) * (rows != 0 ? rows : 1));
+  bool* hasTime = (bool*)malloc(sizeof(bool) * (rows != 0 ? rows : 1));
+  if (times == NULL || hasTime == NULL)
+  {
+    free(times);
+    free(hasTime);
+    TraceSerial.print("  Out of memory, rows not queued\r\n");
+    return 0;
+  }
+  //Pass 1: row times; the newest billing row is the current one.
+  uint32_t prevTs = 0;
+  bool havePrev = false;
+  int32_t newest = -1;
+  dlmsVARIANT* row;
+  for (uint16_t r = 0; r != rows; ++r)
+  {
+    hasTime[r] = false;
+    if (va_getByIndex(buffer->Arr, r, &row) == 0 && row->vt == DLMS_DATA_TYPE_STRUCTURE &&
+        row->Arr != NULL)
+    {
+      hasTime[r] = pg_rowTime(cols, count, row, period, &prevTs, &havePrev, &times[r]);
+      if (hasTime[r] && (newest < 0 || times[r] > times[newest]))
+      {
+        newest = r;
+      }
+    }
+  }
+  //Pass 2: queue the selected rows.
+  char obis[24], name[48], cell[64];
+  obisToString(p->ln, obis, sizeof(obis));
+  const char* pname = obisName(p->ln);
+  rd_profileBegin(obis, *pname != 0 ? pname : "Profile");
+  for (uint16_t c = 0; c != count; ++c)
+  {
+    obisToString(cols[c].e.ln, obis, sizeof(obis));
+    pg_columnName(&cols[c], name, sizeof(name));
+    rd_profileColumn(obis, name, pg_unit(&cols[c]));
+  }
+  uint16_t queued = 0;
+  uint32_t newMark = mark;
+  for (uint16_t r = 0; r != rows; ++r)
+  {
+    if (va_getByIndex(buffer->Arr, r, &row) != 0 || row->vt != DLMS_DATA_TYPE_STRUCTURE ||
+        row->Arr == NULL)
+    {
+      continue;
+    }
+    bool send;
+    switch (kind)
+    {
+      case PG_BLOCK:
+      case PG_DAILY:
+      case PG_EVENT:
+        send = hasTime[r] && times[r] > mark;
+        break;
+      case PG_BILLING:
+        send = (int32_t)r == newest || (hasTime[r] && times[r] > mark);
+        break;
+      default:
+        send = true;
+        break;
+    }
+    if (!send)
+    {
+      continue;
+    }
+    //The current billing row changes until the month closes: never marked.
+    //A row stamped in the future (meter clock set back) is not marked either.
+    if (hasTime[r] && times[r] > newMark && !(kind == PG_BILLING && (int32_t)r == newest) &&
+        times[r] <= nowS + 86400UL)
+    {
+      newMark = times[r];
+    }
+    if (hasTime[r])
+    {
+      pg_tsText(times[r], cell, sizeof(cell));
+      rd_profileRowBegin(cell);
+    }
+    else
+    {
+      rd_profileRowBegin(NULL);
+    }
+    for (uint16_t c = 0; c != count; ++c)
+    {
+      dlmsVARIANT* v = NULL;
+      if (c >= row->Arr->size || va_getByIndex(row->Arr, c, &v) != 0)
+      {
+        v = NULL;
+      }
+      double number;
+      const char* unit;
+      if (c == 0 && hasTime[r] && cols[0].e.classId == DLMS_OBJECT_TYPE_CLOCK)
+      {
+        pg_tsText(times[r], cell, sizeof(cell));
+        rd_profileCellText(cell);
+      }
+      else if (v == NULL || v->vt == DLMS_DATA_TYPE_NONE)
+      {
+        rd_profileCellText(NULL);
+      }
+      else if (formatValue(&cols[c].e, v, cell, sizeof(cell), &number, &unit))
+      {
+        rd_profileCellNumber(number);
+      }
+      else
+      {
+        rd_profileCellText(cell);
+      }
+    }
+    int id = kind == PG_EVENT ? pg_eventId(cols, count, row) : -1;
+    rd_profileRowEnd(id >= 0 ? eventName(id) : NULL);
+    ++queued;
+  }
+  rd_profileEnd();
+  if (pg_hasMarker(kind) && newMark != mark)
+  {
+    char key[16];
+    pg_markKey(p->ln, key, sizeof(key));
+    mk_advance(key, newMark);
+  }
+  free(times);
+  free(hasTime);
+  return queued;
+}
+
+//Read one profile, print it (table on full cycles, one line otherwise) and
+//queue its new rows. Only link errors are returned.
+static int pg_readProfile(const AvEntry* p, PgKind kind, const unsigned char* now, bool nowValid,
+                          bool full)
 {
   char obis[24];
   char from[24], to[24];
@@ -566,8 +818,18 @@ static int pg_readProfile(const AvEntry* p, const unsigned char* now, bool nowVa
   uint32_t period = 0, inUse = 0, maxEntries = 0;
   obisToString(p->ln, obis, sizeof(obis));
   const char* name = obisName(p->ln);
-  TraceSerial.printf("\r\n---------------- %s (%s) ----------------\r\n",
-                     *name != 0 ? name : "Profile", obis);
+  if (*name == 0)
+  {
+    name = "Profile";
+  }
+  if (full)
+  {
+    TraceSerial.printf("\r\n---------------- %s (%s) ----------------\r\n", name, obis);
+  }
+  else
+  {
+    TraceSerial.printf("  %-26s ", name);
+  }
   int ret = pg_readColumns(p->ln, &cols, &count);
   if (ret != 0)
   {
@@ -589,15 +851,26 @@ static int pg_readProfile(const AvEntry* p, const unsigned char* now, bool nowVa
     free(cols);
     return ret;
   }
-  TraceSerial.printf("  Columns %u, capture period %lu s, entries %lu of %lu\r\n",
-                     (unsigned)count, (unsigned long)period,
-                     (unsigned long)inUse, (unsigned long)maxEntries);
+  if (full)
+  {
+    TraceSerial.printf("  Columns %u, capture period %lu s, entries %lu of %lu\r\n",
+                       (unsigned)count, (unsigned long)period,
+                       (unsigned long)inUse, (unsigned long)maxEntries);
+  }
+  char key[16];
+  pg_markKey(p->ln, key, sizeof(key));
+  uint32_t nowS = 0;
+  bool haveNow = nowValid && dtToSeconds(now, &nowS);
+  uint32_t mark = pg_hasMarker(kind) ? mk_get(key) : 0;
+  if (mark != 0 && haveNow && mark > nowS + 86400UL)
+  {
+    //Newer than the meter clock: the clock was set back. Start over.
+    mark = 0;
+  }
   gxByteBuffer access;
   BYTE_BUFFER_INIT(&access);
-  uint32_t nowS = 0;
   bool byRange = period != 0 && count != 0 &&
-                 cols[0].e.classId == DLMS_OBJECT_TYPE_CLOCK &&
-                 nowValid && dtToSeconds(now, &nowS);
+                 cols[0].e.classId == DLMS_OBJECT_TYPE_CLOCK && haveNow;
   if (byRange)
   {
     unsigned char start[12], end[12];
@@ -606,11 +879,31 @@ static int pg_readProfile(const AvEntry* p, const unsigned char* now, bool nowVa
     {
       window = PG_MIN_WINDOW_S;
     }
-    dtFromSeconds(nowS - window, now, start);
+    uint32_t maxBack = period * PG_MAX_NEW_ROWS;
+    if (maxBack > PG_MAX_BACK_S || maxBack / PG_MAX_NEW_ROWS != period)
+    {
+      maxBack = PG_MAX_BACK_S;
+    }
+    //From the newest row sent; a full read also shows the usual window.
+    uint32_t fromS = mark != 0 ? mark + 1 : nowS - window;
+    if (full && fromS > nowS - window)
+    {
+      fromS = nowS - window;
+    }
+    //Catch-up limit for marked profiles only: the instantaneous profile has
+    //a 1 s capture period and keeps its usual window.
+    if (pg_hasMarker(kind) && fromS < nowS - maxBack)
+    {
+      fromS = nowS - maxBack;
+    }
+    dtFromSeconds(fromS, now, start);
     dtFromSeconds(nowS + period, now, end);
-    dtText(start, from, sizeof(from));
-    dtText(end, to, sizeof(to));
-    TraceSerial.printf("  Reading range %s .. %s\r\n", from, to);
+    if (full)
+    {
+      dtText(start, from, sizeof(from));
+      dtText(end, to, sizeof(to));
+      TraceSerial.printf("  Reading range %s .. %s\r\n", from, to);
+    }
     ret = pg_rangeSelector(&access, &cols[0], start, end);
   }
   else if (inUse > PG_PLAIN_MAX_ROWS)
@@ -629,8 +922,23 @@ static int pg_readProfile(const AvEntry* p, const unsigned char* now, bool nowVa
                         byRange ? &access : NULL, &value);
     if (ret == 0)
     {
-      TraceSerial.printf("  Buffer read in %lu ms\r\n", (unsigned long)(millis() - start));
-      pg_printBuffer(cols, count, &value, period, now);
+      uint32_t ms = millis() - start;
+      if (full)
+      {
+        TraceSerial.printf("  Buffer read in %lu ms\r\n", (unsigned long)ms);
+        pg_printBuffer(cols, count, &value, period, now);
+      }
+      uint16_t queued = pg_collect(p, kind, cols, count, &value, period, mark, nowS);
+      unsigned rows = value.vt == DLMS_DATA_TYPE_ARRAY && value.Arr != NULL ? (unsigned)value.Arr->size : 0;
+      if (full)
+      {
+        TraceSerial.printf("  Rows queued for upload: %u\r\n", (unsigned)queued);
+      }
+      else
+      {
+        TraceSerial.printf("%3u rows read, %3u queued (%lu ms)\r\n", rows, (unsigned)queued,
+                           (unsigned long)ms);
+      }
     }
     else
     {
@@ -643,32 +951,41 @@ static int pg_readProfile(const AvEntry* p, const unsigned char* now, bool nowVa
   return isLinkError(ret) ? ret : 0;
 }
 
-//Read and print every profile generic object of the association view.
-//Scaler profiles are not printed; they are used to scale the others.
-int pg_readAll()
+//Read the meter clock (attribute 2 of 0.0.1.0.0.255) into now. valid = it is
+//a date-time. Returns the read error (link errors matter).
+int pg_readClock(unsigned char* now, bool* valid)
 {
-  int ret;
-  unsigned char now[12];
   dlmsVARIANT value;
-  memset(now, 0, sizeof(now));
+  memset(now, 0, 12);
   var_init(&value);
-  ret = readAttribute(DLMS_OBJECT_TYPE_CLOCK, CLOCK_LN, 2, NULL, &value);
-  bool nowValid = ret == 0 && isDateTimeCell(&value);
-  if (nowValid)
+  int ret = readAttribute(DLMS_OBJECT_TYPE_CLOCK, CLOCK_LN, 2, NULL, &value);
+  *valid = ret == 0 && isDateTimeCell(&value);
+  if (*valid)
   {
     memcpy(now, value.byteArr->data, 12);
   }
   var_clear(&value);
-  if (isLinkError(ret))
-  {
-    return ret;
-  }
+  return ret;
+}
+
+//Meter clock as meter local seconds. False if it is not a usable date.
+bool pg_clockSeconds(const unsigned char* now, uint32_t* out)
+{
+  return dtToSeconds(now, out);
+}
+
+//Read the profile generic objects this cycle wants (flags, see the header).
+//Scaler profiles are not read here; they are used to scale the others.
+int pg_readCycle(uint8_t flags, const unsigned char* now, bool nowValid)
+{
+  bool full = (flags & CYCLE_FULL) != 0;
   if (!nowValid)
   {
     TraceSerial.print("\r\n  Meter clock not readable: block/daily load are read only if small.\r\n");
   }
-  TraceSerial.print("\r\n====================== Profile generic ======================\r\n");
-  ret = 0;
+  TraceSerial.print(full ? "\r\n====================== Profile generic ======================\r\n"
+                         : "\r\n-------------------------- Profiles --------------------------\r\n");
+  int ret = 0;
   for (uint16_t pos = 0; pos != g_avCount; ++pos)
   {
     const AvEntry* e = &g_av[pos];
@@ -676,12 +993,19 @@ int pg_readAll()
     {
       continue;
     }
-    if ((ret = pg_readProfile(e, now, nowValid)) != 0)
+    PgKind kind = pg_kind(e->ln);
+    if (!pg_wanted(kind, flags))
     {
+      continue;
+    }
+    if ((ret = pg_readProfile(e, kind, now, nowValid, full)) != 0)
+    {
+      rd_profileCancel();
       TraceSerial.print("  Meter stopped answering. Profiles aborted.\r\n");
       break;
     }
   }
-  TraceSerial.print("=============================================================\r\n");
+  TraceSerial.print(full ? "=============================================================\r\n"
+                         : "--------------------------------------------------------------\r\n");
   return ret;
 }

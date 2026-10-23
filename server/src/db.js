@@ -5,7 +5,15 @@
 //  Duplicates (a message resent after a lost SEND OK) are dropped by
 //  (device_id, boot, seq). boot 0 means "no boot id" (2.0.0 log bridge):
 //  those are never treated as duplicates because seq restarts at each boot.
+//
+//  Profile rows (FW 2.0.2) are stored once per (device, profile, row_key):
+//  the firmware may send a row again after an outage or a reboot. A row with
+//  a time is keyed by that time, and a resend replaces its cells. Event rows
+//  (several may share a second) and rows without a time (name plate) are
+//  keyed by a hash of time and cells. The columns of each profile are kept
+//  in profile_columns (latest wins).
 // =============================================================================
+const crypto = require('crypto');
 const Database = require('better-sqlite3');
 
 const SCHEMA = `
@@ -55,7 +63,34 @@ CREATE TABLE IF NOT EXISTS log_uploads (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS log_uploads_dedupe ON log_uploads(device_id, boot, seq) WHERE boot != 0;
 CREATE INDEX IF NOT EXISTS log_uploads_device_time ON log_uploads(device_id, received_at);
+CREATE TABLE IF NOT EXISTS profile_columns (
+  device_id   TEXT NOT NULL,
+  obis        TEXT NOT NULL,
+  name        TEXT NOT NULL,
+  cols        TEXT NOT NULL,                -- JSON [{obis, name, unit}]
+  updated_at  INTEGER NOT NULL,
+  PRIMARY KEY (device_id, obis)
+);
+CREATE TABLE IF NOT EXISTS profile_rows (
+  id          INTEGER PRIMARY KEY,
+  device_id   TEXT NOT NULL,
+  obis        TEXT NOT NULL,
+  t           TEXT,                         -- row time, meter local "YYYY-MM-DD hh:mm:ss"
+  cells       TEXT NOT NULL,                -- JSON array, one cell per column
+  event       TEXT,
+  row_key     TEXT NOT NULL,
+  reading_id  INTEGER,
+  received_at INTEGER NOT NULL,
+  verified    INTEGER NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS profile_rows_dedupe ON profile_rows(device_id, obis, row_key);
+CREATE INDEX IF NOT EXISTS profile_rows_time ON profile_rows(device_id, obis, t);
 `;
+
+function rowKey(row) {
+  if (row.t && !row.e) return `t:${row.t}`;
+  return 'h:' + crypto.createHash('sha256').update(`${row.t ?? ''}\n${JSON.stringify(row.c)}`).digest('hex').slice(0, 32);
+}
 
 function openDb(file) {
   const db = new Database(file);
@@ -84,19 +119,45 @@ function openDb(file) {
     insertLog: db.prepare(`
       INSERT INTO log_uploads (device_id, boot, seq, received_at, bytes, dropped, uptime_s, verified, file)
       VALUES (@deviceId, @boot, @seq, @receivedAt, @bytes, @dropped, @uptimeS, @verified, @file)`),
+    upsertColumns: db.prepare(`
+      INSERT INTO profile_columns (device_id, obis, name, cols, updated_at)
+      VALUES (@deviceId, @obis, @name, @cols, @now)
+      ON CONFLICT(device_id, obis) DO UPDATE SET name = @name, cols = @cols, updated_at = @now`),
+    profileRowExists: db.prepare('SELECT 1 FROM profile_rows WHERE device_id = ? AND obis = ? AND row_key = ?'),
+    upsertProfileRow: db.prepare(`
+      INSERT INTO profile_rows (device_id, obis, t, cells, event, row_key, reading_id, received_at, verified)
+      VALUES (@deviceId, @obis, @t, @cells, @event, @rowKey, @readingId, @receivedAt, @verified)
+      ON CONFLICT(device_id, obis, row_key) DO UPDATE SET cells = @cells, event = @event,
+        reading_id = @readingId, received_at = @receivedAt, verified = @verified
+      WHERE cells != @cells`),
   };
 
-  /** Store a reading. Returns false if it was a duplicate. */
+  /**
+   * Store a reading and its profile rows. Returns {stored, newRows}: stored is
+   * false if the reading was a duplicate; newRows counts profile rows not seen before.
+   */
   const saveReading = db.transaction((m) => {
     q.touchDevice.run({ id: m.deviceId, now: m.receivedAt, ip: m.ip, fw: m.fw ?? null, verified: m.verified ? 1 : 0 });
-    if (q.readingExists.get(m.deviceId, m.boot, m.seq)) return false;
+    if (q.readingExists.get(m.deviceId, m.boot, m.seq)) return { stored: false, newRows: 0 };
     const { lastInsertRowid } = q.insertReading.run({
       deviceId: m.deviceId, boot: m.boot, seq: m.seq, receivedAt: m.receivedAt, readAt: m.readAt,
       ret: m.ret, fw: m.fw ?? null, verified: m.verified ? 1 : 0, count: m.values.length,
     });
     for (const v of m.values) q.insertValue.run({ readingId: lastInsertRowid, ...v });
     q.setLastReading.run({ id: lastInsertRowid, deviceId: m.deviceId, readAt: m.readAt });
-    return true;
+    let newRows = 0;
+    for (const p of m.profiles || []) {
+      q.upsertColumns.run({ deviceId: m.deviceId, obis: p.obis, name: p.name, cols: JSON.stringify(p.cols), now: m.receivedAt });
+      for (const r of p.rows) {
+        const key = rowKey(r);
+        if (!q.profileRowExists.get(m.deviceId, p.obis, key)) newRows++;
+        q.upsertProfileRow.run({
+          deviceId: m.deviceId, obis: p.obis, t: r.t, cells: JSON.stringify(r.c), event: r.e,
+          rowKey: key, readingId: lastInsertRowid, receivedAt: m.receivedAt, verified: m.verified ? 1 : 0,
+        });
+      }
+    }
+    return { stored: true, newRows };
   });
 
   /** True if this log upload was stored before (a resend). */
@@ -138,6 +199,32 @@ function openDb(file) {
     WHERE r.device_id = @deviceId AND v.obis = @obis AND r.read_at BETWEEN @from AND @to
     ORDER BY r.read_at DESC LIMIT @limit`);
 
+  const profileListStmt = db.prepare(`
+    SELECT c.obis, c.name, c.cols, c.updated_at AS updatedAt,
+           (SELECT COUNT(*) FROM profile_rows r WHERE r.device_id = c.device_id AND r.obis = c.obis) AS rowCount,
+           (SELECT MAX(t) FROM profile_rows r WHERE r.device_id = c.device_id AND r.obis = c.obis) AS lastT
+    FROM profile_columns c WHERE c.device_id = ? ORDER BY c.obis`);
+  const profileColsStmt = db.prepare('SELECT name, cols FROM profile_columns WHERE device_id = ? AND obis = ?');
+  // Rows without a time (name plate) sort last; from/to only match timed rows.
+  const profileRowsStmt = db.prepare(`
+    SELECT t, cells, event, received_at AS receivedAt, verified FROM profile_rows
+    WHERE device_id = @deviceId AND obis = @obis
+      AND (@from IS NULL OR t >= @from) AND (@to IS NULL OR t <= @to)
+    ORDER BY t IS NULL, t DESC, id DESC LIMIT @limit`);
+
+  function profiles(deviceId) {
+    return profileListStmt.all(deviceId).map((p) => ({ ...p, cols: JSON.parse(p.cols) }));
+  }
+
+  /** One profile's columns and rows (newest first), or null if the device never sent it. */
+  function profileRows({ deviceId, obis, from = null, to = null, limit }) {
+    const c = profileColsStmt.get(deviceId, obis);
+    if (!c) return null;
+    const rows = profileRowsStmt.all({ deviceId, obis, from, to, limit })
+      .map((r) => ({ t: r.t, c: JSON.parse(r.cells), e: r.event, receivedAt: r.receivedAt, verified: r.verified }));
+    return { obis, name: c.name, cols: JSON.parse(c.cols), rows };
+  }
+
   function latestReading(deviceId) {
     const d = deviceStmt.get(deviceId);
     if (!d) return undefined;
@@ -150,6 +237,7 @@ function openDb(file) {
   // ── Retention ────────────────────────────────────────────────────────────
   const pruneReadingsStmt = db.prepare('DELETE FROM readings WHERE read_at < ?');
   const pruneLogsStmt = db.prepare('DELETE FROM log_uploads WHERE received_at < ?');
+  const pruneProfileRowsStmt = db.prepare('DELETE FROM profile_rows WHERE received_at < ?');
   const fixLastStmt = db.prepare(`
     UPDATE devices SET last_reading_id =
       (SELECT id FROM readings r WHERE r.device_id = devices.id ORDER BY read_at DESC LIMIT 1)
@@ -157,6 +245,7 @@ function openDb(file) {
   const prune = db.transaction((before) => {
     const n = pruneReadingsStmt.run(before).changes;
     pruneLogsStmt.run(before);
+    pruneProfileRowsStmt.run(before);
     fixLastStmt.run();
     return n;
   });
@@ -172,6 +261,8 @@ function openDb(file) {
     latestReading,
     readings: (p) => readingsStmt.all(p),
     history: (p) => historyStmt.all(p),
+    profiles,
+    profileRows,
     prune,
     close: () => db.close(),
   };

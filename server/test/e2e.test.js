@@ -115,6 +115,87 @@ test('bytes exactly as the firmware formats them (log_bridge.ino, reading_upload
   });
 });
 
+test('profile rows are stored once and served by profile', async () => {
+  const block = (rows) => ({
+    obis: '1.0.99.1.0.255', name: 'Block Load Profile',
+    cols: [{ obis: '0.0.1.0.0.255', name: 'Clock', u: '' }, { obis: '1.0.1.29.0.255', name: 'Block kWh', u: 'kWh' }],
+    rows: rows.map(([t, kwh]) => ({ t, c: [t, kwh] })),
+  });
+  const events = {
+    obis: '0.0.99.98.0.255', name: 'Event Log: Voltage',
+    cols: [{ obis: '0.0.1.0.0.255', name: 'Clock', u: '' }, { obis: '0.0.96.11.0.255', name: 'Event Code: Voltage', u: '' }],
+    rows: [{ t: '2026-03-07 22:56:25', c: ['2026-03-07 22:56:25', 7], e: 'Over voltage - Occ' }],
+  };
+  const nameplate = {
+    obis: '0.0.94.91.10.255', name: 'Name Plate Profile',
+    cols: [{ obis: '0.0.96.1.0.255', name: 'Meter Serial Number', u: '' }],
+    rows: [{ t: null, c: ['X1234567'] }],
+  };
+  await withServer({}, async (s) => {
+    const msg = (seq, profiles) => buildMessage({ type: 'READING', deviceId: IMEI, boot: 4, seq, fw: '2.0.2',
+      body: JSON.stringify({ ...READING, profiles }), key: KEY });
+    // The second reading repeats a block (sent again after an outage) and the name plate.
+    const replies = await send(s.tcpPort, Buffer.concat([
+      msg(0, [block([['2026-10-23 10:00:00', 0.5], ['2026-10-23 10:30:00', 0.42]]), events, nameplate]),
+      msg(1, [block([['2026-10-23 10:30:00', 0.42], ['2026-10-23 11:00:00', 0.61]]), nameplate]),
+    ]), 2);
+    assert.deepStrictEqual(replies, [{ ok: true, type: 'READING', seq: 0 }, { ok: true, type: 'READING', seq: 1 }]);
+
+    const list = await get(s, `/api/devices/${IMEI}/profiles`);
+    assert.deepStrictEqual(list.body.map((p) => [p.obis, p.rowCount, p.lastT]), [
+      ['0.0.94.91.10.255', 1, null],
+      ['0.0.99.98.0.255', 1, '2026-03-07 22:56:25'],
+      ['1.0.99.1.0.255', 3, '2026-10-23 11:00:00'],
+    ]);
+    assert.strictEqual(list.body[2].cols[1].unit, 'kWh');
+
+    const rows = await get(s, `/api/devices/${IMEI}/profiles/1.0.99.1.0.255`);
+    assert.deepStrictEqual(rows.body.rows.map((r) => [r.t, r.c[1]]),
+      [['2026-10-23 11:00:00', 0.61], ['2026-10-23 10:30:00', 0.42], ['2026-10-23 10:00:00', 0.5]]);
+    assert.strictEqual(rows.body.rows[0].verified, 1);
+
+    const range = await get(s, `/api/devices/${IMEI}/profiles/1.0.99.1.0.255?from=2026-10-23%2010:15&to=2026-10-23%2010:45`);
+    assert.deepStrictEqual(range.body.rows.map((r) => r.t), ['2026-10-23 10:30:00']);
+    const day = await get(s, `/api/devices/${IMEI}/profiles/1.0.99.1.0.255?to=2026-10-23`);
+    assert.strictEqual(day.body.rows.length, 3, 'a bare "to" date includes the whole day');
+
+    const ev = await get(s, `/api/devices/${IMEI}/profiles/0.0.99.98.0.255`);
+    assert.strictEqual(ev.body.rows[0].e, 'Over voltage - Occ');
+
+    // A block sent again with other values replaces the stored one.
+    await send(s.tcpPort, msg(2, [block([['2026-10-23 11:00:00', 0.65]])]), 1);
+    const fixed = await get(s, `/api/devices/${IMEI}/profiles/1.0.99.1.0.255`);
+    assert.deepStrictEqual(fixed.body.rows.map((r) => r.c[1]), [0.65, 0.42, 0.5]);
+
+    assert.strictEqual((await get(s, `/api/devices/${IMEI}/profiles/1.0.99.2.0.255`)).status, 404);
+    assert.strictEqual((await get(s, `/api/devices/${IMEI}/profiles/x`)).status, 400);
+    assert.strictEqual((await get(s, `/api/devices/${IMEI}/profiles/1.0.99.1.0.255?from=yesterday`)).status, 400);
+  });
+});
+
+test('profiles exactly as the firmware formats them (reading_upload.ino rd_profile*)', async () => {
+  await withServer({}, async (s) => {
+    const body = '{"ret":0,"values":[],"profiles":[{"obis":"1.0.98.1.0.255","name":"Billing Profile",' +
+      '"cols":[{"obis":"0.0.0.1.2.255","name":"Billing Date","u":""},{"obis":"1.0.1.8.0.255","name":"Active Energy Import","u":"kWh"}],' +
+      '"rows":[{"t":"2026-10-01 00:00:00","c":["2026-10-01 00:00:00",23415.63]},' +
+      '{"t":"2026-10-23 10:31:02","c":["2026-10-23 10:31:02",23496.05]}]},' +
+      '{"obis":"0.0.99.98.3.255","name":"Event Log: Transaction","cols":[],"rows":[]}]}';
+    const replies = await send(s.tcpPort, buildMessage({ type: 'READING', deviceId: IMEI, boot: 2, seq: 0, fw: '2.0.2', body, key: KEY }), 1);
+    assert.deepStrictEqual(replies, [{ ok: true, type: 'READING', seq: 0 }]);
+    const p = await get(s, `/api/devices/${IMEI}/profiles/1.0.98.1.0.255`);
+    assert.deepStrictEqual(p.body.rows.map((r) => r.c[1]), [23496.05, 23415.63]);
+  });
+});
+
+test('a bad profile rejects the whole reading', async () => {
+  await withServer({}, async (s) => {
+    const body = JSON.stringify({ ...READING, profiles: [{ obis: '1.0.99.1.0.255', cols: [], rows: [{ t: 'now', c: [] }] }] });
+    const replies = await send(s.tcpPort, buildMessage({ type: 'READING', deviceId: IMEI, boot: 1, seq: 0, body, key: KEY }), 1);
+    assert.strictEqual(replies[0].ok, false);
+    assert.match(replies[0].error, /rows\[0\]\.t/);
+  });
+});
+
 test('resent messages are stored once', async () => {
   await withServer({}, async (s) => {
     const r = buildMessage({ type: 'READING', deviceId: IMEI, boot: 3, seq: 5, body: JSON.stringify(READING), key: KEY });

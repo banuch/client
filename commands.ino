@@ -5,6 +5,10 @@
 //    GET_STATUS                      also shows reg=<state> fp=<key fingerprint>
 //    CHECK_OTA                       queue an immediate check (runs in loop())
 //    SET key=value [key=value ...]   keys: host port secret interval apn
+//                                    read (meter reading interval, s)
+//                                    profile (profile read interval, min)
+//    RESET_MARKS                     serial only: forget which profile rows
+//                                    were sent (e.g. after a meter change)
 //    REBOOT
 //
 //  BLE is reachable by anyone nearby, so over BLE:
@@ -22,6 +26,8 @@ static void cmd_status(Print& out) {
     out.printf("server=%s:%u key=%s interval=%lus apn=%s\n", g_cfg.host.c_str(), g_cfg.port,
                g_cfg.secret.length() == 64 ? "set" : "MISSING", (unsigned long)g_cfg.intervalS,
                g_cfg.apn.c_str());
+    out.printf("read=%lus profile=%lumin %s\n", (unsigned long)g_cfg.readS,
+               (unsigned long)g_cfg.profileMin, sched_statusLine().c_str());
     out.printf("%s\n", reg_statusLine().c_str());
     out.printf("modem=%s busy=%d partition=%s\n", g_ota.modemReady ? "ready" : "down", g_ota.busy,
                run ? run->label : "?");
@@ -73,8 +79,8 @@ void cmd_handle(String line, CmdSource src, Print& out) {
     cmd.toUpperCase();
 
     if (cmd == "HELP") {
-        out.println("GET_STATUS | CHECK_OTA | SET key=value ... (host port secret interval apn"
-                    " [auth=<key> over BLE]) | REBOOT");
+        out.println("GET_STATUS | CHECK_OTA | SET key=value ... (host port secret interval apn read profile"
+                    " [auth=<key> over BLE]) | RESET_MARKS | REBOOT");
     } else if (cmd == "GET_STATUS" || cmd == "STATUS") {
         cmd_status(out);
     } else if (cmd == "CHECK_OTA") {
@@ -82,6 +88,10 @@ void cmd_handle(String line, CmdSource src, Print& out) {
         else { g_ota.checkRequested = true; out.println("OK check queued"); }
     } else if (cmd == "SET") {
         cmd_set(args, src, out);
+    } else if (cmd == "RESET_MARKS") {
+        if (src == CMD_BLE) { out.println("ERR RESET_MARKS is serial only"); return; }
+        mk_resetAll();
+        out.println("OK profile markers cleared, next cycles resend the default history");
     } else if (cmd == "REBOOT") {
         if (g_ota.busy) { out.println("BUSY try again after the current check"); return; }
         out.println("OK rebooting");

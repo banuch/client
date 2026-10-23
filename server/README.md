@@ -61,10 +61,13 @@ upload the image on the OTA dashboard. To run it as a service, see
 
 ## Page
 
-- **Device list:** IMEI, last seen (green under 10 min, amber under 30 min, red
+- **Device list:** IMEI, last seen (green under 35 min, amber under 90 min, red
   after that), firmware, signed/unsigned.
 - **Latest:** every value of the last read cycle, with a filter.
 - **History:** one numeric value over 24 h / 7 d / 30 d, as a chart and a table.
+- **Profiles:** block load, daily load, billing, instantaneous, event logs and
+  name plate as tables (FW 2.0.2). Wide profiles (billing, instantaneous) are
+  shown one line per column with the newest 12 entries side by side.
 - **Readings:** each read cycle with its result code and value count.
 - **Log:** the serial log of one day (last 256 KB).
 
@@ -97,6 +100,33 @@ READING body (values as on the BLE link):
 `ret` is the meter cycle's result code (0 = OK). A failed cycle is still sent, so
 communication problems with the meter show up on the page.
 
+FW 2.0.2 adds the profile rows read in the cycle (left out when there are none):
+
+```json
+"profiles":[{"obis":"1.0.99.1.0.255","name":"Block Load Profile",
+  "cols":[{"obis":"0.0.1.0.0.255","name":"Clock","u":""},{"obis":"1.0.1.29.0.255","name":"Block kWh","u":"kWh"}],
+  "rows":[{"t":"2026-10-23 10:30:00","c":["2026-10-23 10:30:00",0.42]},
+          {"t":"2026-03-07 22:56:25","c":["2026-03-07 22:56:25",7],"e":"Over voltage - Occ"}]}]
+```
+
+`t` is the row time in meter local time (or `null`), `c` one cell per column
+(number, string or `null`), `e` the event name of event log rows. The firmware
+sends only rows it has not sent before (plus the current billing row and the
+instantaneous snapshot each time), but after a reboot or an outage it may send
+some again: each row is stored once per device and profile. Timed rows are
+keyed by `t` (a resend with other values replaces the row); event rows and
+rows without a time by a hash of `t` and `c`.
+
+| Profile | Read (firmware defaults, settable over BLE / `SET`) | Sent |
+|---|---|---|
+| Meter readings (values) | every 15 min (`read`) | all values |
+| Instantaneous 1.0.94.91.0.255 | every 30 min (`profile`) | the snapshot |
+| Block load 1.0.99.1.0.255 | every 30 min | new blocks |
+| Billing 1.0.98.1.0.255 | every 30 min | current row; closed months once |
+| Event logs 0.0.99.98.0-5.255 | every 30 min | new events |
+| Daily load 1.0.99.2.0.255 | first cycle after midnight | new days |
+| Name plate, others | boot and BLE "read now" | every row |
+
 The LOG body is raw serial text.
 
 The server answers each message with one line (`{"ok":true,...}`,
@@ -127,7 +157,8 @@ under your IMEIs.
 
 ## REST API
 
-All times are epoch milliseconds. `from` / `to` also take ISO dates.
+All times are epoch milliseconds. `from` / `to` also take ISO dates. Profile
+rows are the exception (meter local time as text, see the table).
 
 | Call | Returns |
 |---|---|
@@ -136,6 +167,8 @@ All times are epoch milliseconds. `from` / `to` also take ISO dates.
 | `GET /api/devices/:id/latest` | latest reading with all values, or `null` |
 | `GET /api/devices/:id/readings?from=&to=&limit=` | read cycles (default last 7 days, max 5000) |
 | `GET /api/devices/:id/readings?obis=1.0.32.7.0.255&from=&to=` | one value over time |
+| `GET /api/devices/:id/profiles` | profiles the device sent: columns, row count, newest row time |
+| `GET /api/devices/:id/profiles/:obis?from=&to=&limit=` | `{obis, name, cols, rows}`, rows newest first (default 500, max 5000). `from` / `to` are meter local time `YYYY-MM-DD[ hh:mm[:ss]]`; a bare `to` date includes that day. |
 | `GET /api/devices/:id/log-dates` | days with a log file, newest first |
 | `GET /api/devices/:id/logs?date=YYYY-MM-DD&tail=65536` | end of that day's log (text) |
 

@@ -196,7 +196,7 @@ void lb_upload()
       ok = lb_sendReading(item);
       if (ok)
       {
-        rd_pop();
+        rd_pop(true);
         ++readings;
       }
     }

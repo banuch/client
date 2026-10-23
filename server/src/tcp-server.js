@@ -44,10 +44,14 @@ function createTcpServer(cfg, { db, logs, log = console.log }) {
         return { ok: false, seq: header.seq, error: parsed.error };
       }
       const age = Math.min(header.ageS, MAX_AGE_S);
-      const stored = db.saveReading({
+      const { profiles } = parsed.reading;
+      const { stored, newRows } = db.saveReading({
         ...base, fw: header.fw, readAt: now - age * 1000, ret: parsed.reading.ret, values: parsed.reading.values,
+        profiles,
       });
-      log(`[TCP] READING ${header.deviceId} seq=${header.seq} ${parsed.reading.values.length} values` +
+      const rowCount = profiles.reduce((n, p) => n + p.rows.length, 0);
+      const prof = profiles.length ? ` ${profiles.length} profiles ${rowCount} rows (${newRows} new)` : '';
+      log(`[TCP] READING ${header.deviceId} seq=${header.seq} ${parsed.reading.values.length} values${prof}` +
         ` ret=${parsed.reading.ret} age=${age}s${stored ? '' : ' duplicate'}${tag}`);
       return stored ? { ok: true, type: 'READING', seq: header.seq } : { ok: true, type: 'READING', seq: header.seq, dup: true };
     }

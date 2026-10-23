@@ -26,6 +26,7 @@
       <nav class="tabs" role="tablist">
         <button role="tab" data-tab="latest" aria-selected="true">Latest</button>
         <button role="tab" data-tab="history" aria-selected="false">History</button>
+        <button role="tab" data-tab="profiles" aria-selected="false">Profiles</button>
         <button role="tab" data-tab="readings" aria-selected="false">Readings</button>
         <button role="tab" data-tab="log" aria-selected="false">Log</button>
       </nav>
@@ -55,6 +56,25 @@
           <table>
             <thead><tr><th>Read at</th><th class="num">Value</th><th>Unit</th></tr></thead>
             <tbody id="history-body"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="tab" id="tab-profiles" hidden>
+        <div class="controls">
+          <select id="profile-select" aria-label="Profile"></select>
+          <select id="profile-range" aria-label="Range">
+            <option value="1">Last 24 h</option>
+            <option value="7" selected>Last 7 days</option>
+            <option value="31">Last 31 days</option>
+            <option value="0">All</option>
+          </select>
+          <span id="profile-info" class="muted"></span>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead id="profile-head"></thead>
+            <tbody id="profile-body"></tbody>
           </table>
         </div>
       </div>

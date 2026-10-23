@@ -2,9 +2,13 @@
 // AMR Data page. Plain DOM, no framework. All device data is inserted with
 // textContent, never as HTML.
 
-const ONLINE_MS = 10 * 60 * 1000;    // two 5-minute read cycles
-const OFFLINE_MS = 30 * 60 * 1000;
+const ONLINE_MS = 35 * 60 * 1000;    // two 15-minute read cycles
+const OFFLINE_MS = 90 * 60 * 1000;
 const REFRESH_MS = 30 * 1000;
+// Profiles wider than this (billing, instantaneous) are shown one row per
+// column, newest PROFILE_WIDE_ROWS entries side by side.
+const PROFILE_WIDE_COLS = 16;
+const PROFILE_WIDE_ROWS = 12;
 
 const $ = (id) => document.getElementById(id);
 const state = { devices: [], selected: null, tab: 'latest', latest: null };
@@ -88,13 +92,14 @@ function select(id) {
   $('d-title').textContent = id;
   renderDevices();
   $('obis-select').replaceChildren();
+  $('profile-select').replaceChildren();
   showTab(state.tab);
 }
 
 function showTab(tab) {
   state.tab = tab;
   for (const b of document.querySelectorAll('.tabs button')) b.setAttribute('aria-selected', String(b.dataset.tab === tab));
-  for (const t of ['latest', 'history', 'readings', 'log']) $(`tab-${t}`).hidden = t !== tab;
+  for (const t of ['latest', 'history', 'profiles', 'readings', 'log']) $(`tab-${t}`).hidden = t !== tab;
   refreshTab();
 }
 
@@ -102,7 +107,7 @@ function refreshTab() {
   if (!state.selected) return;
   const d = state.devices.find((x) => x.id === state.selected);
   $('d-meta').textContent = d ? `first seen ${fmtTime(d.firstSeen)} · last IP ${d.lastIp || '-'}` : '';
-  const run = { latest: loadLatest, history: loadHistory, readings: loadReadings, log: loadLog }[state.tab];
+  const run = { latest: loadLatest, history: loadHistory, profiles: loadProfiles, readings: loadReadings, log: loadLog }[state.tab];
   run().catch((e) => console.error(e));
 }
 
@@ -206,6 +211,67 @@ function drawChart(rows) {
   text(w - pad.r, h - 6, new Date(x1).toLocaleString(), 'end');
 }
 
+// ── Profiles ────────────────────────────────────────────────────────────────
+// Row times are the meter's local time as text, so the range is built from
+// the browser's local time (the page and the meters are in the same zone).
+function localText(ms) {
+  const d = new Date(ms);
+  const p = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+}
+
+function cellText(v) {
+  if (v === null || v === undefined) return '-';
+  return typeof v === 'number' ? formatNum(v) : v;
+}
+
+function colLabel(c) {
+  return c.unit ? `${c.name || c.obis} (${c.unit})` : (c.name || c.obis);
+}
+
+async function loadProfiles() {
+  const id = encodeURIComponent(state.selected);
+  const list = await api(`/api/devices/${id}/profiles`);
+  const sel = $('profile-select');
+  const keep = sel.value;
+  sel.replaceChildren(...list.map((p) => el('option', { value: p.obis, text: `${p.name || p.obis} (${p.rowCount})` })));
+  if (list.some((p) => p.obis === keep)) sel.value = keep;
+  const head = $('profile-head');
+  const body = $('profile-body');
+  if (!list.length) {
+    head.replaceChildren();
+    body.replaceChildren();
+    $('profile-info').textContent = 'No profile data yet (needs firmware 2.0.2).';
+    return;
+  }
+  const info = list.find((p) => p.obis === sel.value);
+  const days = Number($('profile-range').value);
+  // Profiles without timed rows (name plate) ignore the range.
+  const from = days && info.lastT ? `&from=${encodeURIComponent(localText(Date.now() - days * 86400 * 1000))}` : '';
+  const p = await api(`/api/devices/${id}/profiles/${encodeURIComponent(sel.value)}?limit=5000${from}`);
+  const hasEvents = p.rows.some((r) => r.e);
+  const wide = p.cols.length > PROFILE_WIDE_COLS;
+  if (wide) {
+    // One line per column, newest entries side by side.
+    const rows = p.rows.slice(0, PROFILE_WIDE_ROWS);
+    head.replaceChildren(el('tr', {}, el('th', { text: 'Column' }),
+      ...rows.map((r) => el('th', { class: 'num', text: r.t || fmtTime(r.receivedAt) }))));
+    body.replaceChildren(...p.cols.map((c, i) => el('tr', {},
+      el('td', { text: colLabel(c), title: c.obis }),
+      ...rows.map((r) => el('td', { class: 'num', text: cellText(r.c[i]) })))));
+    $('profile-info').textContent = `${p.rows.length} entries in range` +
+      (p.rows.length > rows.length ? `, showing the newest ${rows.length}` : '');
+    return;
+  }
+  head.replaceChildren(el('tr', {},
+    ...p.cols.map((c) => el('th', { text: colLabel(c), title: c.obis })),
+    hasEvents ? el('th', { text: 'Event' }) : null));
+  body.replaceChildren(...p.rows.map((r) => el('tr', {},
+    ...p.cols.map((c, i) => el('td', { class: typeof r.c[i] === 'number' ? 'num' : '', text: cellText(r.c[i]) })),
+    hasEvents ? el('td', { text: r.e || '' }) : null)));
+  $('profile-info').textContent = `${p.rows.length} rows` + (p.rows.length >= 5000 ? ' (newest 5000)' : '');
+}
+
 async function loadReadings() {
   const rows = await api(`/api/devices/${encodeURIComponent(state.selected)}/readings?limit=500`);
   const body = $('readings-body');
@@ -246,6 +312,8 @@ $('search').addEventListener('input', renderDevices);
 $('value-filter').addEventListener('input', renderLatest);
 $('obis-select').addEventListener('change', () => loadHistory());
 $('range-select').addEventListener('change', () => loadHistory());
+$('profile-select').addEventListener('change', () => loadProfiles());
+$('profile-range').addEventListener('change', () => loadProfiles());
 $('log-date').addEventListener('change', () => loadLog());
 $('log-refresh').addEventListener('click', () => loadLog());
 for (const b of document.querySelectorAll('.tabs button')) b.addEventListener('click', () => showTab(b.dataset.tab));

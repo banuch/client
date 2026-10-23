@@ -112,6 +112,38 @@ test('reading: valid body', () => {
   assert.strictEqual(r.reading.values[2].unit, '');
 });
 
+const PROFILE = {
+  obis: '1.0.99.1.0.255',
+  name: 'Block Load Profile',
+  cols: [{ obis: '0.0.1.0.0.255', name: 'Clock', u: '' }, { obis: '1.0.1.29.0.255', name: 'Block kWh', u: 'kWh' }],
+  rows: [{ t: '2026-10-23 10:30:00', c: ['2026-10-23 10:30:00', 0.42] }],
+};
+
+test('reading: profiles', () => {
+  const r = parseReading(Buffer.from(JSON.stringify({ ret: 0, values: [], profiles: [PROFILE] })));
+  assert.ok(r.ok, r.error);
+  assert.deepStrictEqual(r.reading.profiles[0].cols[1], { obis: '1.0.1.29.0.255', name: 'Block kWh', unit: 'kWh' });
+  assert.deepStrictEqual(r.reading.profiles[0].rows[0], { t: '2026-10-23 10:30:00', c: ['2026-10-23 10:30:00', 0.42], e: null });
+  // Without profiles (FW 2.0.1) the list is empty.
+  assert.deepStrictEqual(parseReading(Buffer.from('{"ret":0,"values":[]}')).reading.profiles, []);
+  // Event rows, rows without time, missing cells.
+  const ev = parseReading(Buffer.from(JSON.stringify({ ret: 0, values: [], profiles: [{ ...PROFILE,
+    rows: [{ t: null, c: [null, 7], e: 'Over voltage - Occ' }] }] })));
+  assert.ok(ev.ok, ev.error);
+  assert.strictEqual(ev.reading.profiles[0].rows[0].e, 'Over voltage - Occ');
+});
+
+test('reading: bad profiles', () => {
+  const bad = (p) => parseReading(Buffer.from(JSON.stringify({ ret: 0, values: [], profiles: p })));
+  assert.match(bad({}).error, /profiles must be an array/);
+  assert.match(bad([{ ...PROFILE, obis: 'x' }]).error, /profiles\[0\]\.obis/);
+  assert.match(bad([{ ...PROFILE, cols: [{ obis: '1.2' }] }]).error, /cols\[0\]\.obis/);
+  assert.match(bad([{ ...PROFILE, rows: [{ t: '23-10-2026', c: [] }] }]).error, /rows\[0\]\.t/);
+  assert.match(bad([{ ...PROFILE, rows: [{ t: null, c: [1, 2, 3] }] }]).error, /one cell per column/);
+  assert.match(bad([{ ...PROFILE, rows: [{ t: null, c: [{}] }] }]).error, /c\[0\] must be/);
+  assert.match(bad([{ ...PROFILE, rows: [{ t: null, c: [], e: 5 }] }]).error, /\.e must be/);
+});
+
 test('reading: bad bodies', () => {
   const bad = (o) => parseReading(Buffer.from(typeof o === 'string' ? o : JSON.stringify(o)));
   assert.ok(!bad('{').ok);
