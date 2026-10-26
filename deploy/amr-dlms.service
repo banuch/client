@@ -1,0 +1,23 @@
+# systemd unit for the AMR DLMS data server (dlms_server/).
+# Installed by deploy/install-services.sh; see deploy/README.md.
+#   journalctl -u amr-dlms -f
+[Unit]
+Description=AMR DLMS data server (meter readings, profiles and logs, TCP 7001, web 7002)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=amr
+Group=amr
+WorkingDirectory=/opt/client/dlms_server
+ExecStart=/usr/bin/node src/server.js
+Restart=always
+RestartSec=5
+Environment=NODE_ENV=production
+NoNewPrivileges=true
+ProtectSystem=full
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

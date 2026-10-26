@@ -46,5 +46,5 @@ its OTA requests and its data messages with it. **Both servers must have the sam
 
 Clone the whole repository on the VM (both servers load `../shared`), then in each server
 folder: `npm install`, `cp .env.example .env`, edit it, `npm start`.
-`dlms_server/amr-data.service` runs the data server under systemd. Open 7000, 7001 and
+`deploy/install-services.sh` runs both servers under systemd (see `deploy/README.md`). Open 7000, 7001 and
 7002 in the firewall (or put nginx in front of the web ports).

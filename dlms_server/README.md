@@ -57,7 +57,7 @@ sudo ufw allow 7002/tcp
 
 Then set `DATA_SERVER_HOST` in `firmware/config.h` to the VM address, build, and
 upload the image on the OTA dashboard. To run it as a service, see
-`amr-data.service`.
+`deploy/README.md`.
 
 ## Page
 
