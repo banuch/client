@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OTA Console</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="topbar">
+  <button id="menuBtn" aria-label="Open menu">☰</button>
+  <strong>OTA Console</strong>
+</div>
+<div class="shell">
+  <aside class="sidebar">
+    <div class="brand"><span class="dot"></span> OTA Console</div>
+    <nav class="nav" id="nav">
+      <a href="#/overview" data-route="overview">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>
+        Overview</a>
+      <a href="#/devices" data-route="devices">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="2" width="14" height="20" rx="2"/><path d="M12 18h.01"/></svg>
+        Devices</a>
+      <a href="#/releases" data-route="releases">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.7l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.7l7 4a2 2 0 0 0 2 0l7-4a2 2 0 0 0 1-1.7z"/><path d="M3.3 7 12 12l8.7-5M12 22V12"/></svg>
+        Releases</a>
+      <a href="#/history" data-route="history">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
+        History</a>
+      <a href="#/users" data-route="users" class="admin-only">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8"/></svg>
+        Users</a>
+    </nav>
+    <div class="side-foot">
+      <div class="who" id="who">…</div>
+      <div class="muted" id="role"></div>
+      <div class="row">
+        <button id="accountBtn">Account</button>
+        <button id="logoutBtn">Log out</button>
+      </div>
+    </div>
+  </aside>
+  <main id="view"><div class="empty">Loading…</div></main>
+</div>
+<div id="toast"></div>
+<script src="app.js"></script>
+</body>
+</html>
