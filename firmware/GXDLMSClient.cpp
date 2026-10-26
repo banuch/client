@@ -329,6 +329,12 @@ gxByteBuffer* GXDLMSClient::GetPassword()
   return &settings.password;
 }
 
+void GXDLMSClient::SetPassword(const unsigned char* password, uint16_t passwordSize)
+{
+  bb_clear(&settings.password);
+  bb_set(&settings.password, password, passwordSize);
+}
+
 uint16_t GXDLMSClient::GetClientAddress()
 {
   return settings.clientAddress;

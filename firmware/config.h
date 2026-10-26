@@ -14,7 +14,7 @@
 #include "trace_tee.h"
 
 // ── Firmware identity ───────────────────────────────────────────────────────
-#define FW_VERSION "2.0.3" // MAJOR.MINOR.PATCH -- bump before each release
+#define FW_VERSION "2.0.4" // MAJOR.MINOR.PATCH -- bump before each release
 
 // ── Debug output ────────────────────────────────────────────────────────────
 // OTA results go through the trace tee, so they also reach the data server.
@@ -59,7 +59,18 @@
 #define PROFILE_INTERVAL_MIN_MIN 5UL        // also must divide 1440 (a day)
 #define SCHED_DELAY_S 60UL
 
-// What a read cycle does (schedule.ino decides, client.ino/profiles.ino read).
+// ── Meter passwords (meter_password.ino; NVS overrides, METER_PW commands) ─
+// LLS passwords tried in this order until the meter accepts one. The one
+// that worked is saved and tried first from then on. When it is rejected the
+// rest are tried once each, at most every MPW_SEARCH_GAP_S (meters may lock
+// the port after repeated wrong passwords); METER_PW DETECT or a BLE "read
+// now" searches at once.
+#define METER_PASSWORDS_DEFAULT {"Hello"}
+#define MPW_MAX 8
+#define MPW_LEN_MAX 16
+#define MPW_SEARCH_GAP_S (6UL * 3600UL)
+
+// What a read cycle does (schedule.ino decides, firmware.ino/profiles.ino read).
 #define CYCLE_VALUES   0x01 // meter readings (register values)
 #define CYCLE_PROFILES 0x02 // instantaneous, block load, billing, event logs
 #define CYCLE_DAILY    0x04 // daily load profile
@@ -79,7 +90,10 @@
 // The OTA server's registration public key. Get this line from the server:
 //   cd ota_server && npm run pubkey
 // Empty = automatic registration off; provision with SET secret=... instead.
-#define SERVER_REG_PUBKEY_HEX "048b2d915fa60116e353eb5bd63d13d06c02224aa181ad5452449e853bc0a8f3b8c92a48ac827cb53b0b4dd616687b3aef590635c5e3c16a257d00698f69913f32"
+//#define SERVER_REG_PUBKEY_HEX "048b2d915fa60116e353eb5bd63d13d06c02224aa181ad5452449e853bc0a8f3b8c92a48ac827cb53b0b4dd616687b3aef590635c5e3c16a257d00698f69913f32"
+
+#define SERVER_REG_PUBKEY_HEX "049304e2db9c3b0840b16e77748a38287704591242a73677fffc197f09481b628df25330731b7b208ab604dbecfe41f8de11a9cfe779e7342ad4ca169c506d63e7"
+
 
 #define REGISTER_POLL_S 600UL // while waiting for approval (server may say otherwise)
 
@@ -100,6 +114,9 @@
 #define K_READ "read_s"           // meter reading interval, seconds
 #define K_PROFILE "prof_min"      // profile read interval, minutes
 #define K_REG_KEY "reg_key"      // registration key pair (32 priv + 65 pub), until a key arrives
+#define K_MPW_COUNT "mpw_n"       // meter passwords in NVS (absent = METER_PASSWORDS_DEFAULT)
+#define K_MPW_PREFIX "mpw"        // mpw0 .. mpw7
+#define K_MPW_OK "mpw_ok"         // the password the meter last accepted
 
 // ── BLE OTA command service (Nordic UART style, ota_ble.ino) ────────────────
 // A second service on the same BLE server as the meter service (ble_meter.h).

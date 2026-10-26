@@ -61,7 +61,8 @@
 #define METER_SERVER_LOGICAL  1
 #define METER_SERVER_PHYSICAL 0    // 0 = not used. Some meters need e.g. 1, 16 or 256.
 #define METER_AUTH            DLMS_AUTHENTICATION_LOW
-#define METER_PASSWORD        "Hello"
+//Passwords: METER_PASSWORDS_DEFAULT in config.h, list and match in NVS
+//(meter_password.ino, METER_PW commands).
 #define METER_RX_BUFFER_SIZE  2048
 
 // When meter readings and profiles are read: schedule.ino, intervals in
@@ -1542,10 +1543,24 @@ int com_readAllObjects(const char* invocationCounter, uint8_t flags)
       GXTRACE_INT(GET_STR_FROM_EEPROM("Reconnect attempt"), attempt + 1);
     }
   }
+  //Refused (wrong password?): try the other passwords in the list
+  //(meter_password.ino), at most every MPW_SEARCH_GAP_S unless forced.
+  if (mpw_isRejected(ret))
+  {
+    if (mpw_searchAllowed())
+    {
+      ret = mpw_search();
+    }
+    else
+    {
+      TraceSerial.printf("[METER] association refused (%d): %s\r\n", ret, mpw_statusLine().c_str());
+    }
+  }
   if (ret != DLMS_ERROR_CODE_OK)
   {
     return ret;
   }
+  mpw_accepted();
   GXTRACE_INT(GET_STR_FROM_EEPROM("com_initializeConnection SUCCEEDED"), ret);
   //Association view is read once per boot.
   if (!g_avLoaded)
@@ -1627,9 +1642,9 @@ void setup() {
   {
     serverAddress = GXDLMSClient::GetServerAddress(METER_SERVER_LOGICAL, METER_SERVER_PHYSICAL, 0);
   }
-  static const char PASSWORD[] = METER_PASSWORD;
+  //The password is set by mpw_begin() once NVS is loaded.
   Client.init(true, METER_CLIENT_ADDRESS, serverAddress, METER_AUTH,
-              (const unsigned char*)PASSWORD, sizeof(PASSWORD) - 1, DLMS_INTERFACE_TYPE_HDLC);
+              (const unsigned char*)"", 0, DLMS_INTERFACE_TYPE_HDLC);
   //Window 1 / max frame 1024. Works with all meters tested in dlms_client.
   Client.SetHDLCSettings(1024, 1024, 1, 1);
 
@@ -1666,8 +1681,9 @@ void setup() {
   TraceSerial.printf("\r\nMeter UART1 RX=%d TX=%d DTR=%d (level %d), %d baud, client %d, server %u, auth %d\r\n",
                      RXD1_DEFAULT, TXD1_DEFAULT, DTR_PIN_DEFAULT, DTR_ACTIVE_LEVEL,
                      METER_BAUD, METER_CLIENT_ADDRESS, (unsigned)serverAddress, (int)METER_AUTH);
-  //Settings in NVS: OTA server, read intervals, ...
+  //Settings in NVS: OTA server, read intervals, meter passwords, ...
   cfg_load();
+  mpw_begin();
   TraceSerial.printf("\r\nMeter readings every %lu s, profiles every %lu min, daily load after midnight\r\n",
                      (unsigned long)g_cfg.readS, (unsigned long)g_cfg.profileMin);
   //BLE link to the mobile app, plus the OTA command service on the same server.
@@ -1722,6 +1738,11 @@ void loop() {
   //Everything on boot and when the app asks; otherwise what the schedule
   //says is due (schedule.ino).
   bool bleRequest = ble_takeReadRequest();
+  if (bleRequest)
+  {
+    //Someone is at the meter: a refused password may search the list now.
+    mpw_forceSearch();
+  }
   uint8_t flags = firstRun || bleRequest ? CYCLE_ALL : sched_due();
   if (flags != 0)
   {

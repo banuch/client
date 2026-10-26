@@ -85,6 +85,9 @@ class GXDLMSClient
     //Get password.
     gxByteBuffer* GetPassword();
 
+    //Set the password used by the next AARQ.
+    void SetPassword(const unsigned char* password, uint16_t passwordSize);
+
     //Handle received reply.
     int GetData(gxByteBuffer* reply, gxReplyData* data);
 

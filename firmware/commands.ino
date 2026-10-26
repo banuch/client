@@ -9,12 +9,18 @@
 //                                    profile (profile read interval, min)
 //    RESET_MARKS                     serial only: forget which profile rows
 //                                    were sent (e.g. after a meter change)
+//    METER_PW LIST                   meter passwords (masked), which is in use
+//    METER_PW ADD <password>         append to the list (meter_password.ino)
+//    METER_PW DEL <n>                remove #n
+//    METER_PW CLEAR                  back to METER_PASSWORDS_DEFAULT
+//    METER_PW DETECT                 forget the match, try the list from #1
 //    REBOOT
 //
 //  BLE is reachable by anyone nearby, so over BLE:
-//    - SET needs auth=<current device key> once a key is provisioned
-//      (first-time commissioning of an unprovisioned device is open), and
-//    - the key itself is never echoed back.
+//    - SET and METER_PW ADD/DEL/CLEAR/DETECT need auth=<current device key>
+//      once a key is provisioned (first-time commissioning of an
+//      unprovisioned device is open), and
+//    - the key and the meter passwords are never echoed back.
 //  Even a successful malicious SET host=... cannot push firmware: every
 //  offer must carry a valid HMAC from the real server (see ota_client.ino).
 // =============================================================================
@@ -29,10 +35,59 @@ static void cmd_status(Print& out) {
     out.printf("read=%lus profile=%lumin %s\n", (unsigned long)g_cfg.readS,
                (unsigned long)g_cfg.profileMin, sched_statusLine().c_str());
     out.printf("%s\n", reg_statusLine().c_str());
+    out.printf("%s\n", mpw_statusLine().c_str());
     out.printf("modem=%s busy=%d partition=%s\n", g_ota.modemReady ? "ready" : "down", g_ota.busy,
                run ? run->label : "?");
     out.printf("last=%s offer=%s next_check_in=%lds\n", g_ota.lastResult.c_str(),
                g_ota.lastOfferVer.length() ? g_ota.lastOfferVer.c_str() : "-", nextS < 0 ? 0 : nextS);
+}
+
+// Constant-time check of auth=<key> against the device key. Over BLE a
+// provisioned device requires it; serial (physical access) never does.
+static bool cmd_authOk(const String& auth, CmdSource src) {
+    if (src != CMD_BLE || g_cfg.secret.length() != 64) return true;
+    if (auth.length() != g_cfg.secret.length()) return false;
+    uint8_t diff = 0;
+    for (size_t i = 0; i < auth.length(); i++) diff |= (uint8_t)(auth[i] ^ g_cfg.secret[i]);
+    return diff == 0;
+}
+
+static void cmd_meterPw(String args, CmdSource src, Print& out) {
+    // Words: <sub> [value], plus an optional auth=<key> anywhere.
+    String words[3], auth;
+    int n = 0;
+    args.trim();
+    while (args.length()) {
+        int sp = args.indexOf(' ');
+        String tok = sp == -1 ? args : args.substring(0, sp);
+        args = sp == -1 ? String("") : args.substring(sp + 1);
+        args.trim();
+        if (tok.startsWith("auth=") || tok.startsWith("AUTH=")) { auth = tok.substring(5); auth.toLowerCase(); }
+        else if (n < 3) words[n++] = tok;
+    }
+    String sub = words[0];
+    sub.toUpperCase();
+    if (sub == "" || sub == "LIST") { mpw_list(out); out.println(mpw_statusLine()); return; }
+    if (!cmd_authOk(auth, src)) { out.println("ERR auth=<current device key> required over BLE"); return; }
+
+    String err;
+    if (sub == "ADD") {
+        if (n != 2) { out.println("ERR usage: METER_PW ADD <password> (no spaces)"); return; }
+        err = mpw_add(words[1]);
+        if (!err.length()) out.printf("OK added %s\n", mpw_mask(words[1]).c_str());
+    } else if (sub == "DEL") {
+        err = n == 2 ? mpw_delete(words[1].toInt()) : String("usage: METER_PW DEL <n>");
+        if (!err.length()) out.printf("OK deleted #%s\n", words[1].c_str());
+    } else if (sub == "CLEAR") {
+        mpw_clear();
+        out.println("OK back to the default passwords");
+    } else if (sub == "DETECT") {
+        mpw_detect();
+        out.println("OK the next cycle tries the list from #1");
+    } else {
+        err = "unknown METER_PW command (LIST ADD DEL CLEAR DETECT)";
+    }
+    if (err.length()) out.printf("ERR %s\n", err.c_str());
 }
 
 static void cmd_set(String args, CmdSource src, Print& out) {
@@ -55,11 +110,7 @@ static void cmd_set(String args, CmdSource src, Print& out) {
     }
     if (n == 0) { out.println("ERR nothing to set"); return; }
 
-    bool authOk = auth.length() == g_cfg.secret.length();
-    uint8_t diff = 0;
-    for (size_t i = 0; authOk && i < auth.length(); i++) diff |= (uint8_t)(auth[i] ^ g_cfg.secret[i]);
-    authOk = authOk && diff == 0;
-    if (src == CMD_BLE && g_cfg.secret.length() == 64 && !authOk) {
+    if (!cmd_authOk(auth, src)) {
         out.println("ERR auth=<current device key> required over BLE");
         return;
     }
@@ -80,7 +131,8 @@ void cmd_handle(String line, CmdSource src, Print& out) {
 
     if (cmd == "HELP") {
         out.println("GET_STATUS | CHECK_OTA | SET key=value ... (host port secret interval apn read profile"
-                    " [auth=<key> over BLE]) | RESET_MARKS | REBOOT");
+                    " [auth=<key> over BLE]) | RESET_MARKS | METER_PW LIST|ADD <pw>|DEL <n>|CLEAR|DETECT"
+                    " | REBOOT");
     } else if (cmd == "GET_STATUS" || cmd == "STATUS") {
         cmd_status(out);
     } else if (cmd == "CHECK_OTA") {
@@ -88,6 +140,8 @@ void cmd_handle(String line, CmdSource src, Print& out) {
         else { g_ota.checkRequested = true; out.println("OK check queued"); }
     } else if (cmd == "SET") {
         cmd_set(args, src, out);
+    } else if (cmd == "METER_PW") {
+        cmd_meterPw(args, src, out);
     } else if (cmd == "RESET_MARKS") {
         if (src == CMD_BLE) { out.println("ERR RESET_MARKS is serial only"); return; }
         mk_resetAll();
