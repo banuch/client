@@ -14,7 +14,7 @@
 #include "trace_tee.h"
 
 // ── Firmware identity ───────────────────────────────────────────────────────
-#define FW_VERSION "2.0.2" // MAJOR.MINOR.PATCH -- bump before each release
+#define FW_VERSION "2.0.3" // MAJOR.MINOR.PATCH -- bump before each release
 
 // ── Debug output ────────────────────────────────────────────────────────────
 // OTA results go through the trace tee, so they also reach the data server.
@@ -68,7 +68,7 @@
 
 // ── OTA server / timing defaults (NVS overrides) ────────────────────────────
 #define OTA_HOST_DEFAULT "65.20.77.137"
-#define OTA_PORT_DEFAULT 3000
+#define OTA_PORT_DEFAULT 7000
 #define APN_DEFAULT "airtelgprs.com"
 #define CHECK_INTERVAL_DEFAULT_S 86400UL // 24 h; the server may override per device
 #define CHECK_INTERVAL_MIN_S 300UL

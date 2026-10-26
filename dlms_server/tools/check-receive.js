@@ -7,7 +7,7 @@
 //
 //    --host <addr>      server address            (default 127.0.0.1)
 //    --port <n>         device TCP port           (default TCP_PORT or 7001)
-//    --http <n>         web/API port              (default HTTP_PORT or 5101)
+//    --http <n>         web/API port              (default HTTP_PORT or 7002)
 //    --user <name>      page login                (default VIEW_USER or admin)
 //    --pass <password>  page login                (default VIEW_PASSWORD)
 //    --device <id>      device id to send as      (default TEST-CHECK)

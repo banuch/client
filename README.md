@@ -14,10 +14,10 @@ device-specific firmware updates.
 
 ```
              RS-232 (DLMS/HDLC)          TCP 7001
-  meter ◀──────────────────▶ device ─────────────────▶ dlms_server  (web + API :5101)
+  meter ◀──────────────────▶ device ─────────────────▶ dlms_server  (web + API :7002)
                                │  ▲
-                        BLE    │  │  HTTP 3000 (register, check, firmware, report)
-  phone app ◀──────────────────┘  └────────────────▶ ota_server   (dashboard :3000)
+                        BLE    │  │  HTTP 7000 (register, check, firmware, report)
+  phone app ◀──────────────────┘  └────────────────▶ ota_server   (dashboard :7000)
 ```
 
 ## Ports
@@ -25,8 +25,8 @@ device-specific firmware updates.
 | Port | Who listens | Set in |
 |---|---|---|
 | 7001/tcp | `dlms_server` device port | `DATA_SERVER_PORT` in `firmware/config.h`, `TCP_PORT` in `dlms_server/.env` |
-| 5101/tcp | `dlms_server` web page + API | `HTTP_PORT` in `dlms_server/.env` |
-| 3000/tcp | `ota_server` device API + dashboard | `OTA_PORT_DEFAULT` in `firmware/config.h` (NVS `port` overrides), `PORT` in `ota_server/.env` |
+| 7002/tcp | `dlms_server` web page + API | `HTTP_PORT` in `dlms_server/.env` |
+| 7000/tcp | `ota_server` device API + dashboard | `OTA_PORT_DEFAULT` in `firmware/config.h` (NVS `port` overrides), `PORT` in `ota_server/.env` |
 
 ## Device keys
 
@@ -46,5 +46,5 @@ its OTA requests and its data messages with it. **Both servers must have the sam
 
 Clone the whole repository on the VM (both servers load `../shared`), then in each server
 folder: `npm install`, `cp .env.example .env`, edit it, `npm start`.
-`dlms_server/amr-data.service` runs the data server under systemd. Open 7001, 5101 and
-3000 in the firewall (or put nginx in front of the web ports).
+`dlms_server/amr-data.service` runs the data server under systemd. Open 7000, 7001 and
+7002 in the firewall (or put nginx in front of the web ports).

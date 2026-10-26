@@ -39,7 +39,7 @@ function loadConfig(overrides = {}) {
     tcpPort: Number(env.TCP_PORT || 7001),
     // Web page + REST API
     httpHost: env.HTTP_HOST || '0.0.0.0',
-    httpPort: Number(env.HTTP_PORT || 5101),
+    httpPort: Number(env.HTTP_PORT || 7002),
     viewUser: env.VIEW_USER || 'admin',
     viewPassword: env.VIEW_PASSWORD || '',
     // Same MASTER_SECRET as the OTA server: device key = HMAC(MASTER_SECRET, IMEI)

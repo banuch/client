@@ -7,7 +7,7 @@ log files, and shows them on a small web page with a REST API.
 ```
 ESP32 + EC200U ──TCP 7001──▶ src/tcp-server.js ──▶ data/amr-data.db
                                                 └─▶ data/logs/<IMEI>/<date>.log
-browser ────────HTTP 5101──▶ src/http-server.js (page + /api)
+browser ────────HTTP 7002──▶ src/http-server.js (page + /api)
 ```
 
 ## Run
@@ -38,13 +38,13 @@ node tools/check-receive.js --host 65.20.77.137 --pass <VIEW_PASSWORD> --secret 
 | Option | Default |
 |---|---|
 | `--host` | 127.0.0.1 |
-| `--port` / `--http` | `TCP_PORT` / `HTTP_PORT` (7001 / 5101) |
+| `--port` / `--http` | `TCP_PORT` / `HTTP_PORT` (7001 / 7002) |
 | `--user` / `--pass` | `VIEW_USER` / `VIEW_PASSWORD` |
 | `--secret` | `MASTER_SECRET` (`""` sends unsigned) |
 | `--device` | `TEST-CHECK` (shows up as a device on the page) |
-| `--no-api` | only check the TCP side (when port 5101 is not reachable) |
+| `--no-api` | only check the TCP side (when port 7002 is not reachable) |
 
-Open `http://<host>:5101/` and log in with `VIEW_USER` / `VIEW_PASSWORD`.
+Open `http://<host>:7002/` and log in with `VIEW_USER` / `VIEW_PASSWORD`.
 Without `VIEW_PASSWORD` the page has no login and only listens on 127.0.0.1.
 For HTTPS, put nginx in front and keep `HTTP_HOST=127.0.0.1`.
 
@@ -52,7 +52,7 @@ On the VM, open the device port and (if not behind nginx) the page port:
 
 ```bash
 sudo ufw allow 7001/tcp
-sudo ufw allow 5101/tcp
+sudo ufw allow 7002/tcp
 ```
 
 Then set `DATA_SERVER_HOST` in `firmware/config.h` to the VM address, build, and
