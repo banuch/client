@@ -1,11 +1,11 @@
 # AMR data server
 
 Receives meter readings and the serial log from the AMR firmware
-(`client/`, FW 2.0.1 and later) over TCP. Stores them in SQLite plus daily
+(`firmware/`, FW 2.0.1 and later) over TCP. Stores them in SQLite plus daily
 log files, and shows them on a small web page with a REST API.
 
 ```
-ESP32 + EC200U ──TCP 5100──▶ src/tcp-server.js ──▶ data/amr-data.db
+ESP32 + EC200U ──TCP 7001──▶ src/tcp-server.js ──▶ data/amr-data.db
                                                 └─▶ data/logs/<IMEI>/<date>.log
 browser ────────HTTP 5101──▶ src/http-server.js (page + /api)
 ```
@@ -15,7 +15,7 @@ browser ────────HTTP 5101──▶ src/http-server.js (page + /a
 Node.js 18 or newer.
 
 ```bash
-cd server
+cd dlms_server
 npm install
 cp .env.example .env      # set VIEW_PASSWORD and MASTER_SECRET
 npm start
@@ -38,7 +38,7 @@ node tools/check-receive.js --host 65.20.77.137 --pass <VIEW_PASSWORD> --secret 
 | Option | Default |
 |---|---|
 | `--host` | 127.0.0.1 |
-| `--port` / `--http` | `TCP_PORT` / `HTTP_PORT` (5100 / 5101) |
+| `--port` / `--http` | `TCP_PORT` / `HTTP_PORT` (7001 / 5101) |
 | `--user` / `--pass` | `VIEW_USER` / `VIEW_PASSWORD` |
 | `--secret` | `MASTER_SECRET` (`""` sends unsigned) |
 | `--device` | `TEST-CHECK` (shows up as a device on the page) |
@@ -51,11 +51,11 @@ For HTTPS, put nginx in front and keep `HTTP_HOST=127.0.0.1`.
 On the VM, open the device port and (if not behind nginx) the page port:
 
 ```bash
-sudo ufw allow 5100/tcp
+sudo ufw allow 7001/tcp
 sudo ufw allow 5101/tcp
 ```
 
-Then set `DATA_SERVER_HOST` in `client/config.h` to the VM address, build, and
+Then set `DATA_SERVER_HOST` in `firmware/config.h` to the VM address, build, and
 upload the image on the OTA dashboard. To run it as a service, see
 `amr-data.service`.
 

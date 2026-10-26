@@ -1,7 +1,7 @@
 // =============================================================================
 //  ota_client.ino  --  device-specific OTA: check -> download -> flash -> report
 //
-//  Protocol (server/src/routes/device.js):
+//  Protocol (ota_server/src/routes/device.js):
 //    POST /ota/check   {device_id, current_ver, ts, sig}
 //         sig = HMAC(key, "<imei>|<current_ver>|<ts>")
 //      <- {update_available, version, size, md5, download_token,

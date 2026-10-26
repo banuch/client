@@ -1,33 +1,14 @@
 'use strict';
 // =============================================================================
-//  hmac.js  --  per-device keys and request signatures
+//  hmac.js  --  request verification and replay guard
 //
-//  device_key = HMAC_SHA256(MASTER_SECRET, imei)        (lower-case hex, 64 chars)
-//  signature  = HMAC_SHA256(device_key, surface)        (lower-case hex)
+//  Device key and signature: shared/device-key.js (same as dlms_server).
 //
 //  Signed surfaces (must match firmware ota_client.ino exactly):
 //    /ota/check   "<imei>|<current_ver>|<ts>"
 //    /ota/report  "<imei>|<version>|<status>|<ts>"
-//
-//  The device stores device_key as the 64-char hex string and uses the ASCII
-//  bytes of that string as its HMAC key -- so does this file.
 // =============================================================================
-const crypto = require('crypto');
-
-function deviceKey(masterSecret, imei) {
-  return crypto.createHmac('sha256', masterSecret).update(String(imei)).digest('hex');
-}
-
-function sign(key, surface) {
-  return crypto.createHmac('sha256', key).update(surface).digest('hex');
-}
-
-function safeEqualHex(a, b) {
-  if (typeof a !== 'string' || typeof b !== 'string') return false;
-  const ba = Buffer.from(a.toLowerCase(), 'utf8');
-  const bb = Buffer.from(b.toLowerCase(), 'utf8');
-  return ba.length === bb.length && crypto.timingSafeEqual(ba, bb);
-}
+const { deviceKey, sign, safeEqualHex } = require('../../shared/device-key');
 
 // Rejects a signature seen before within the timestamp window, so a sniffed
 // request cannot be replayed to mint a second token or a fake report.

@@ -1,7 +1,7 @@
 @echo off
 setlocal EnableDelayedExpansion
 rem ===========================================================================
-rem  build.bat  --  compile, upload and monitor the DLMS client on ESP32-S3
+rem  build.bat  --  compile, upload and monitor the AMR firmware on ESP32-S3
 rem
 rem  Usage:
 rem    build.bat              compile + upload + monitor (port auto-detected)
@@ -50,7 +50,7 @@ if "%FWVER%"=="" (
   echo [WARN] FW_VERSION not found in config.h - release copy skipped.
 ) else (
   if not exist "%RELEASE%" mkdir "%RELEASE%"
-  copy /y "%BUILD%\client.ino.bin" "%RELEASE%\amr_client_%FWVER%.bin" >nul
+  copy /y "%BUILD%\firmware.ino.bin" "%RELEASE%\amr_client_%FWVER%.bin" >nul
   if errorlevel 1 (
     echo [WARN] Could not copy the .bin to %RELEASE%
   ) else (

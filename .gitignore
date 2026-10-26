@@ -1,4 +1,10 @@
-release/
-server/node_modules/
-server/data/
-server/.env
+node_modules/
+.env
+
+# Server data (SQLite, logs, firmware images, registration key)
+dlms_server/data/
+ota_server/data/
+
+# Firmware build output and OTA images
+firmware/build/
+firmware/release/

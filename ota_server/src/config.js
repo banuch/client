@@ -48,7 +48,7 @@ function loadConfig(overrides = {}) {
   loadDotEnv(path.join(__dirname, '..', '.env'));
   const dataDir = overrides.dataDir || process.env.DATA_DIR || path.join(__dirname, '..', 'data');
   const cfg = {
-    port: Number(process.env.PORT || 8080),
+    port: Number(process.env.PORT || 3000),
     masterSecret: process.env.MASTER_SECRET || '',
     adminToken: process.env.ADMIN_TOKEN || '',
     dataDir,

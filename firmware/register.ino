@@ -2,7 +2,7 @@
 //  register.ino  --  automatic registration: get the device key by IMEI,
 //                    without "SET secret=..."
 //
-//  Protocol (server/src/routes/device.js, server/src/regkey.js):
+//  Protocol (ota_server/src/routes/device.js, ota_server/src/regkey.js):
 //    POST /ota/register  {device_id, current_ver, pub}
 //      <- {status:"pending", retry_s}          wait for an admin to approve
 //      <- {status:"approved", iv, ct, tag}     our device key, encrypted

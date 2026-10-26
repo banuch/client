@@ -6,7 +6,7 @@
 //    node tools/check-receive.js [options]
 //
 //    --host <addr>      server address            (default 127.0.0.1)
-//    --port <n>         device TCP port           (default TCP_PORT or 5100)
+//    --port <n>         device TCP port           (default TCP_PORT or 7001)
 //    --http <n>         web/API port              (default HTTP_PORT or 5101)
 //    --user <name>      page login                (default VIEW_USER or admin)
 //    --pass <password>  page login                (default VIEW_PASSWORD)

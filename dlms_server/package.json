@@ -1,5 +1,5 @@
 {
-  "name": "amr-data-server",
+  "name": "amr-dlms-server",
   "version": "1.0.0",
   "description": "Receives meter readings and serial logs from the AMR ESP32 firmware over TCP; SQLite storage, REST API and a small web page",
   "main": "src/server.js",

@@ -1,5 +1,5 @@
 {
-  "name": "ota-device-update-server",
+  "name": "amr-ota-server",
   "version": "1.0.0",
   "description": "Device-specific OTA firmware server for ESP32-S3 + EC200U",
   "main": "src/server.js",

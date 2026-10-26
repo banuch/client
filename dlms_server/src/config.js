@@ -36,7 +36,7 @@ function loadConfig(overrides = {}) {
   const cfg = {
     // Device port (TCP, header line + body, see framing.js)
     tcpHost: env.TCP_HOST || '0.0.0.0',
-    tcpPort: Number(env.TCP_PORT || 5100),
+    tcpPort: Number(env.TCP_PORT || 7001),
     // Web page + REST API
     httpHost: env.HTTP_HOST || '0.0.0.0',
     httpPort: Number(env.HTTP_PORT || 5101),

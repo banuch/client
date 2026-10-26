@@ -40,10 +40,10 @@
 
 // ── Data upload (reading_upload.ino, log_bridge.ino) ────────────────────────
 // After each read cycle the meter values and everything printed on the USB
-// serial port are sent to the data server (client/server, its TCP_PORT).
+// serial port are sent to the data server (dlms_server, its TCP_PORT).
 // "" = upload off.
 #define DATA_SERVER_HOST "65.20.77.137"
-#define DATA_SERVER_PORT 5100
+#define DATA_SERVER_PORT 7001
 #define LOG_DEVICE_ID ""                  // "" = IMEI (ESP-<MAC> until it is read)
 #define LOG_UPLOAD_MAX (128UL * 1024UL)   // most log bytes sent per cycle
 
@@ -77,7 +77,7 @@
 
 // ── Automatic registration (register.ino) ───────────────────────────────────
 // The OTA server's registration public key. Get this line from the server:
-//   cd server && npm run pubkey
+//   cd ota_server && npm run pubkey
 // Empty = automatic registration off; provision with SET secret=... instead.
 #define SERVER_REG_PUBKEY_HEX "048b2d915fa60116e353eb5bd63d13d06c02224aa181ad5452449e853bc0a8f3b8c92a48ac827cb53b0b4dd616687b3aef590635c5e3c16a257d00698f69913f32"
 

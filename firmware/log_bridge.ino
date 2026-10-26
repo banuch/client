@@ -2,7 +2,7 @@
 //  log_bridge.ino  --  Upload readings and the serial trace over the EC200U
 //
 //  After each read cycle, when the meter UART is idle, one TCP connection to
-//  DATA_SERVER_HOST:DATA_SERVER_PORT (client/server) carries the queued
+//  DATA_SERVER_HOST:DATA_SERVER_PORT (dlms_server) carries the queued
 //  readings (reading_upload.ino), oldest first, and then the trace kept in
 //  TraceLog's ring buffer (trace_tee.h). Each message is a header line plus
 //  `bytes` bytes of body:
