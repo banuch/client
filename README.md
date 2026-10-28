@@ -9,6 +9,7 @@ device-specific firmware updates.
 | [`firmware/`](firmware) | ESP32-S3 + EC200U Arduino sketch (FW version in `firmware/config.h`) | `firmware\build.bat [COMx] [compile\|upload\|monitor]` |
 | [`dlms_server/`](dlms_server/README.md) | Receives readings, profiles and logs; SQLite, web page, REST API | `cd dlms_server && npm install && npm start` |
 | [`ota_server/`](ota_server/README.md) | Registration, device keys, OTA releases, dashboard | `cd ota_server && npm install && npm start` |
+| [`tools/ble-configurator/`](tools/ble-configurator/index.html) | Web Bluetooth page to test the device's BLE commands (Chrome/Edge) | open `index.html` in Chrome |
 | [`shared/`](shared) | Device key + HMAC code used by both servers | — |
 | [`docs/`](docs) | IS 15959 standards (2011, 2016, 2017) | — |
 

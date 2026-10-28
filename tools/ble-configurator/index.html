@@ -1,0 +1,573 @@
+<!doctype html>
+<!--
+  BLE configurator for the AMR device (firmware/ble_meter.h, firmware/ota_ble.ino).
+  Web Bluetooth: open in Chrome or Edge from file:// or http://localhost.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AMR BLE Configurator</title>
+<style>
+  :root {
+    --bg: #f5f6f8; --panel: #ffffff; --text: #1d2330; --muted: #667085;
+    --border: #d9dde5; --accent: #2563eb; --accent-text: #ffffff;
+    --ok: #15803d; --err: #b91c1c; --warn: #b45309; --code-bg: #0f172a; --code-text: #e2e8f0;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f1218; --panel: #171b24; --text: #e6e9ef; --muted: #98a2b3;
+      --border: #2a3140; --accent: #3b82f6; --accent-text: #ffffff;
+      --ok: #4ade80; --err: #f87171; --warn: #fbbf24; --code-bg: #0a0d12; --code-text: #d6dde8;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  header { display: flex; flex-wrap: wrap; align-items: center; gap: 12px;
+           padding: 12px 16px; background: var(--panel); border-bottom: 1px solid var(--border); }
+  header h1 { font-size: 17px; margin: 0 12px 0 0; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); display: inline-block; }
+  .dot.on { background: var(--ok); }
+  #connState { color: var(--muted); }
+  main { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px;
+         padding: 16px; max-width: 1400px; margin: 0 auto; }
+  @media (max-width: 900px) { main { grid-template-columns: minmax(0, 1fr); } }
+  section { background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+            padding: 14px; min-width: 0; }
+  h2 { font-size: 15px; margin: 0 0 4px; }
+  h3 { font-size: 13px; margin: 14px 0 6px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .sub { color: var(--muted); font-size: 12px; margin: 0 0 8px; }
+  .row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 6px 0; }
+  button { font: inherit; padding: 6px 12px; border-radius: 6px; border: 1px solid var(--border);
+           background: var(--panel); color: var(--text); cursor: pointer; }
+  button:hover:not(:disabled) { border-color: var(--accent); }
+  button.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+  button.danger { color: var(--err); }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  input { font: inherit; padding: 6px 8px; border-radius: 6px; border: 1px solid var(--border);
+          background: var(--bg); color: var(--text); min-width: 0; }
+  input.w-num { width: 90px; }
+  label { font-size: 12px; color: var(--muted); }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+  .grid > div { display: flex; flex-direction: column; gap: 3px; }
+  .kv { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 8px; }
+  .kv div { background: var(--bg); border-radius: 6px; padding: 6px 8px; }
+  .kv b { display: block; font-size: 11px; color: var(--muted); font-weight: 500; }
+  .kv span { font-weight: 600; }
+  .scroll { max-height: 340px; overflow: auto; border: 1px solid var(--border); border-radius: 6px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 4px 8px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  th { position: sticky; top: 0; background: var(--panel); }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  pre.log { margin: 0; background: var(--code-bg); color: var(--code-text); padding: 8px; border-radius: 6px;
+            height: 320px; overflow: auto; font: 12px/1.4 ui-monospace, Consolas, monospace; white-space: pre-wrap; word-break: break-all; }
+  .tx { color: #93c5fd; } .ok { color: #86efac; } .er { color: #fca5a5; } .sys { color: #94a3b8; }
+  .warnbox { background: var(--bg); border-left: 3px solid var(--warn); padding: 8px 10px; margin: 8px 16px 0;
+             border-radius: 4px; max-width: 1368px; }
+  @media (min-width: 1400px) { .warnbox { margin: 8px auto 0; } }
+  .hidden { display: none; }
+</style>
+</head>
+<body>
+<header>
+  <h1>AMR BLE Configurator</h1>
+  <button id="btnConnect" class="primary">Connect</button>
+  <button id="btnDisconnect" disabled>Disconnect</button>
+  <span class="dot" id="dot"></span><span id="connState">Not connected</span>
+</header>
+<div id="noBle" class="warnbox hidden">
+  Web Bluetooth isn't available here. Open this file in Chrome or Edge on desktop or Android
+  (from <code>file://</code> or <code>http://localhost</code>). On Linux, enable
+  <code>chrome://flags/#enable-experimental-web-platform-features</code>.
+</div>
+
+<main>
+  <!-- ── Meter service (ble_meter.h) ─────────────────────────────────── -->
+  <section>
+    <h2>Meter service</h2>
+    <p class="sub">JSON commands on 4fafc201…, readings on the data characteristic, status on the status characteristic.</p>
+
+    <div class="row">
+      <button data-meter='{"cmd":"read"}'>Read meter now</button>
+      <button data-meter='{"cmd":"get"}'>Get last reading</button>
+      <button data-meter='{"cmd":"status"}'>Refresh status</button>
+    </div>
+
+    <h3>Status</h3>
+    <div class="kv" id="status">
+      <div><b>State</b><span id="stState">–</span></div>
+      <div><b>Return code</b><span id="stRet">–</span></div>
+      <div><b>Values</b><span id="stN">–</span></div>
+      <div><b>Age</b><span id="stAge">–</span></div>
+      <div><b>Read interval</b><span id="stInterval">–</span></div>
+      <div><b>Profile interval</b><span id="stProfile">–</span></div>
+    </div>
+
+    <h3>Intervals</h3>
+    <div class="row">
+      <label for="inInterval">Reading (s, 30–86400)</label>
+      <input id="inInterval" class="w-num" type="number" min="30" max="86400" value="900">
+      <button id="btnInterval">Set</button>
+      <label for="inProfile">Profile (min, divides 1440)</label>
+      <input id="inProfile" class="w-num" type="number" min="5" max="1440" value="30">
+      <button id="btnProfile">Set</button>
+    </div>
+
+    <h3>Reading <span id="rdInfo" style="text-transform:none"></span></h3>
+    <div class="scroll">
+      <table>
+        <thead><tr><th>OBIS</th><th>Name</th><th style="text-align:right">Value</th><th>Unit</th></tr></thead>
+        <tbody id="rdBody"><tr><td colspan="4" class="sys" style="color:var(--muted)">No reading yet</td></tr></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ── Command service (ota_ble.ino → commands.ino) ────────────────── -->
+  <section>
+    <h2>Command console</h2>
+    <p class="sub">Text commands on the Nordic UART service 6e400001…. SET and METER_PW changes need the device key once the device has one.</p>
+
+    <div class="row">
+      <label for="inAuth">Device key (auth)</label>
+      <input id="inAuth" type="password" placeholder="64 hex chars; empty if not provisioned" style="flex:1; min-width:200px" autocomplete="off">
+      <button id="btnShowKey" title="Show/hide">Show</button>
+    </div>
+
+    <div class="row">
+      <button data-cmd="HELP">HELP</button>
+      <button data-cmd="GET_STATUS">GET_STATUS</button>
+      <button data-cmd="CHECK_OTA">CHECK_OTA</button>
+      <button data-cmd="REBOOT" class="danger" data-confirm="Reboot the device?">REBOOT</button>
+    </div>
+
+    <h3>Device status <span id="devUpdated" style="text-transform:none"></span></h3>
+    <div class="kv" id="devStatus"><div><b>–</b><span>Click GET_STATUS</span></div></div>
+
+    <h3>SET</h3>
+    <div class="grid">
+      <div><label for="sHost">host</label><input id="sHost" placeholder="65.20.77.137"></div>
+      <div><label for="sPort">port</label><input id="sPort" type="number" placeholder="7000"></div>
+      <div><label for="sApn">apn</label><input id="sApn" placeholder="airtelgprs.com"></div>
+      <div><label for="sInterval">interval (OTA check, s)</label><input id="sInterval" type="number" placeholder="86400"></div>
+      <div><label for="sRead">read (s)</label><input id="sRead" type="number" placeholder="900"></div>
+      <div><label for="sProfile">profile (min)</label><input id="sProfile" type="number" placeholder="30"></div>
+      <div style="grid-column: 1 / -1"><label for="sSecret">secret (new device key, 64 hex)</label><input id="sSecret" type="password" autocomplete="off"></div>
+    </div>
+    <div class="row"><button id="btnSet" class="primary">Send SET</button><span class="sub" style="margin:0">Loaded from GET_STATUS. Only changed fields (orange) are sent.</span></div>
+
+    <h3>Meter passwords</h3>
+    <div class="row">
+      <button data-cmd="METER_PW LIST">LIST</button>
+      <input id="pwAdd" type="password" placeholder="new password" autocomplete="off" style="width:160px">
+      <button id="btnPwAdd">ADD</button>
+      <input id="pwDel" type="number" min="1" max="8" placeholder="#" class="w-num" style="width:60px">
+      <button id="btnPwDel">DEL</button>
+      <button data-cmd="METER_PW DETECT" data-auth="1">DETECT</button>
+      <button data-cmd="METER_PW CLEAR" data-auth="1" class="danger" data-confirm="Replace the list with the default passwords?">CLEAR</button>
+    </div>
+    <div class="row">
+      <button id="btnDetectNow" class="primary">Detect password now</button>
+      <span class="sub" style="margin:0">Forgets the saved password, then reads the meter so every password is tried.</span>
+    </div>
+
+    <h3>Console</h3>
+    <div class="row">
+      <input id="inRaw" placeholder="Any command, e.g. GET_STATUS" style="flex:1; min-width:200px">
+      <button id="btnRaw" class="primary">Send</button>
+      <button id="btnClear">Clear log</button>
+    </div>
+    <pre class="log" id="log"></pre>
+  </section>
+</main>
+
+<script>
+"use strict";
+const METER_SVC   = "4fafc201-1fb5-459e-8fcc-c5c9c331914b";
+const METER_CMD   = "beb5483e-36e1-4688-b7f5-ea07361b26a8";
+const METER_DATA  = "beb5483e-36e1-4688-b7f5-ea07361b26a9";
+const METER_STAT  = "beb5483e-36e1-4688-b7f5-ea07361b26aa";
+const UART_SVC    = "6e400001-b5a3-f393-e0a9-e50e24dcca9e";
+const UART_RX     = "6e400002-b5a3-f393-e0a9-e50e24dcca9e"; // phone -> device
+const UART_TX     = "6e400003-b5a3-f393-e0a9-e50e24dcca9e"; // device -> phone
+const CMD_MAX     = 200;  // ota_ble.ino truncates longer writes
+
+const $ = id => document.getElementById(id);
+const enc = new TextEncoder(), dec = new TextDecoder();
+let device = null, ch = {};
+let dataBuf = "", uartBuf = "", uartTimer = null;
+let rows = [], rowsSrc = "";
+let queue = Promise.resolve();   // GATT allows one operation at a time
+let detectThenRead = false;      // "Detect password now": read once DETECT says OK
+let refreshAfterSet = false, refreshTimer = null;   // GET_STATUS once the SET reply is in
+
+// ── Log ──────────────────────────────────────────────────────────────────
+function log(text, cls = "") {
+  const el = $("log");
+  const atEnd = el.scrollTop + el.clientHeight >= el.scrollHeight - 4;
+  const t = new Date().toLocaleTimeString();
+  for (const line of String(text).split("\n")) {
+    if (!line && cls !== "") continue;
+    const span = document.createElement("span");
+    span.className = cls || (/^ERR|^BUSY/.test(line) ? "er" : /^OK/.test(line) ? "ok" : "");
+    span.textContent = `${t}  ${line}\n`;
+    el.appendChild(span);
+  }
+  if (atEnd) el.scrollTop = el.scrollHeight;
+}
+// Never show the device key or meter passwords in the log.
+function maskCmd(cmd) {
+  return cmd.replace(/(auth=|secret=)\S+/gi, "$1••••").replace(/^(METER_PW\s+ADD\s+)\S+/i, "$1••••");
+}
+
+// ── Connection ───────────────────────────────────────────────────────────
+// Buttons stay clickable; sendMeter()/sendCmd() say why when they can't send.
+function setConnected(on, name = "") {
+  $("dot").classList.toggle("on", on);
+  $("connState").textContent = on ? `Connected: ${name}` : "Not connected";
+  $("btnConnect").disabled = on;
+  $("btnDisconnect").disabled = !on;
+}
+
+// Why Web Bluetooth can't be used here, or "" when it can.
+function bleProblem() {
+  if (!window.isSecureContext)
+    return "This page isn't a secure context. Open it from file:// or http://localhost, not a network address.";
+  if (!navigator.bluetooth)
+    return "This browser has no Web Bluetooth. Use Chrome or Edge on Windows, macOS or Android.";
+  return "";
+}
+
+async function connect() {
+  const problem = bleProblem();
+  if (problem) { log(problem, "er"); return; }
+  try {
+    if (navigator.bluetooth.getAvailability && !(await navigator.bluetooth.getAvailability())) {
+      log("Bluetooth is off or this PC has no Bluetooth adapter.", "er");
+      return;
+    }
+    device = await navigator.bluetooth.requestDevice({
+      filters: [{ services: [METER_SVC] }, { namePrefix: "DLMS-Meter-" }],
+      optionalServices: [METER_SVC, UART_SVC],
+    });
+    device.addEventListener("gattserverdisconnected", onDisconnected);
+    log(`Connecting to ${device.name || device.id}…`, "sys");
+    const server = await device.gatt.connect();
+    ch = {};
+
+    try {
+      const svc = await server.getPrimaryService(METER_SVC);
+      ch.meterCmd = await svc.getCharacteristic(METER_CMD);
+      ch.meterData = await svc.getCharacteristic(METER_DATA);
+      ch.meterStat = await svc.getCharacteristic(METER_STAT);
+      ch.meterData.addEventListener("characteristicvaluechanged", e => onData(dec.decode(e.target.value)));
+      ch.meterStat.addEventListener("characteristicvaluechanged", e => onStatus(dec.decode(e.target.value)));
+      await ch.meterData.startNotifications();
+      await ch.meterStat.startNotifications();
+      onStatus(dec.decode(await ch.meterStat.readValue()));
+      log("Meter service ready", "sys");
+    } catch (e) { log(`Meter service not found: ${e.message}`, "er"); ch.meterCmd = null; }
+
+    try {
+      const svc = await server.getPrimaryService(UART_SVC);
+      ch.uartRx = await svc.getCharacteristic(UART_RX);
+      ch.uartTx = await svc.getCharacteristic(UART_TX);
+      ch.uartTx.addEventListener("characteristicvaluechanged", e => onUart(dec.decode(e.target.value)));
+      await ch.uartTx.startNotifications();
+      log("Command service ready", "sys");
+    } catch (e) { log(`Command service not found (OTA_BLE_ENABLE=0?): ${e.message}`, "er"); ch.uartRx = null; }
+
+    setConnected(true, device.name || device.id);
+    if (ch.uartRx) sendCmd("GET_STATUS");
+  } catch (e) {
+    if (e.name !== "NotFoundError") log(`Connect failed: ${e.message}`, "er");
+    else log("No device chosen", "sys");
+    if (device && device.gatt.connected) device.gatt.disconnect();
+  }
+}
+
+function onDisconnected() {
+  log("Disconnected", "sys");
+  ch = {};
+  detectThenRead = false;
+  setConnected(false);
+}
+
+// ── Writes ───────────────────────────────────────────────────────────────
+function write(charac, text) {
+  const bytes = enc.encode(text);
+  queue = queue.then(() => charac.writeValueWithResponse(bytes))
+               .catch(e => log(`Write failed: ${e.message}`, "er"));
+  return queue;
+}
+
+function sendMeter(json) {
+  if (!device || !device.gatt.connected) { log("Not connected. Click Connect first.", "er"); return; }
+  if (!ch.meterCmd) { log("The device has no meter service.", "er"); return; }
+  log(`meter ▶ ${json}`, "tx");
+  write(ch.meterCmd, json);
+}
+
+function sendCmd(cmd) {
+  cmd = cmd.trim();
+  if (!cmd) return;
+  if (!device || !device.gatt.connected) { log("Not connected. Click Connect first.", "er"); return; }
+  if (!ch.uartRx) { log("The device has no command service (OTA_BLE_ENABLE=0?).", "er"); return; }
+  if (enc.encode(cmd).length > CMD_MAX) { log(`Command longer than ${CMD_MAX} bytes; the device would cut it`, "er"); return; }
+  log(`▶ ${maskCmd(cmd)}`, "tx");
+  write(ch.uartRx, cmd);
+}
+
+function withAuth(cmd) {
+  const key = $("inAuth").value.trim();
+  return key ? `${cmd} auth=${key}` : cmd;
+}
+
+// ── Notifications ────────────────────────────────────────────────────────
+// Command responses arrive in 180-byte notifications; print whole lines.
+function onUart(text) {
+  uartBuf += text;
+  const parts = uartBuf.split("\n");
+  uartBuf = parts.pop();
+  parts.forEach(l => { l = l.replace(/\r$/, ""); log(l); onUartLine(l); });
+  clearTimeout(uartTimer);
+  uartTimer = setTimeout(() => { if (uartBuf) { log(uartBuf); uartBuf = ""; } }, 400);
+}
+
+// GET_STATUS lines (commands.ino cmd_status) are "key=value key=value ...".
+// A bare word belongs to the previous value ("meter_pw=#1/3 not confirmed").
+const STATUS_LABELS = {
+  fw: "Firmware", imei: "IMEI", server: "OTA server", key: "Device key", interval: "OTA check",
+  apn: "APN", read: "Read interval", profile: "Profile interval", next_read: "Next read",
+  next_profile: "Next profile", clock: "Meter clock", reg: "Registration", fp: "Key fingerprint",
+  meter_pw: "Meter password", search: "Password search", next_search_in: "Next password search", modem: "Modem", busy: "OTA busy", partition: "Partition",
+  last: "Last OTA result", offer: "OTA offer", next_check_in: "Next OTA check",
+};
+const devStatus = {};
+
+function parseStatusLine(line) {
+  if (!/^[a-z_]+=/.test(line)) return false;
+  let key = null;
+  for (const tok of line.split(/\s+/)) {
+    const eq = tok.indexOf("=");
+    if (eq > 0 && /^[a-z_]+$/.test(tok.slice(0, eq))) {
+      key = tok.slice(0, eq);
+      devStatus[key] = tok.slice(eq + 1);
+    } else if (key) {
+      devStatus[key] += " " + tok;
+    }
+  }
+  return true;
+}
+
+function fmtStatus(k, v) {
+  if (k === "next_check_in") return fmtAge(parseInt(v, 10) || 0);
+  if (k === "busy") return v === "1" ? "yes" : "no";
+  return v;
+}
+
+function renderDevStatus() {
+  const box = $("devStatus");
+  box.textContent = "";
+  const keys = Object.keys(STATUS_LABELS).filter(k => k in devStatus)
+    .concat(Object.keys(devStatus).filter(k => !(k in STATUS_LABELS)));
+  for (const k of keys) {
+    const div = document.createElement("div"), b = document.createElement("b"), s = document.createElement("span");
+    b.textContent = STATUS_LABELS[k] || k;
+    s.textContent = fmtStatus(k, devStatus[k]);
+    const v = devStatus[k];
+    if (/MISSING|down|not confirmed|fail|error/i.test(v)) s.style.color = "var(--err)";
+    else if (/^(set|ready|provisioned)$|accepted/.test(v)) s.style.color = "var(--ok)";
+    div.append(b, s);
+    box.appendChild(div);
+  }
+  $("devUpdated").textContent = `— updated ${new Date().toLocaleTimeString()}`;
+  loadSetFields();
+}
+
+// SET form: filled from GET_STATUS; a field the user changed is kept and marked.
+const SET_FIELDS = { host: "sHost", port: "sPort", apn: "sApn", interval: "sInterval", read: "sRead", profile: "sProfile" };
+
+function deviceSetValues() {
+  const v = {};
+  if (devStatus.server) {
+    const i = devStatus.server.lastIndexOf(":");
+    if (i > 0) { v.host = devStatus.server.slice(0, i); v.port = devStatus.server.slice(i + 1); }
+  }
+  if (devStatus.apn !== undefined) v.apn = devStatus.apn;
+  for (const k of ["interval", "read", "profile"])
+    if (devStatus[k] !== undefined) v[k] = devStatus[k].replace(/\D+$/, "");   // "900s", "30min"
+  return v;
+}
+
+function loadSetFields() {
+  const v = deviceSetValues();
+  for (const [k, id] of Object.entries(SET_FIELDS)) {
+    const el = $(id);
+    if (v[k] === undefined) continue;
+    el.dataset.loaded = v[k];
+    if (!el.dataset.dirty) el.value = v[k];
+    markSetField(el);
+  }
+}
+
+function markSetField(el) {
+  const changed = el.dataset.loaded !== undefined && el.value.trim() !== el.dataset.loaded;
+  el.style.borderColor = changed ? "var(--warn)" : "";
+}
+
+function onUartLine(line) {
+  if (parseStatusLine(line)) renderDevStatus();
+  // SET answers one OK/ERR line per key; the device drops a command sent
+  // before it finished the previous one, so wait for the last line.
+  if (refreshAfterSet && /^(OK|ERR)/.test(line)) {
+    clearTimeout(refreshTimer);
+    refreshTimer = setTimeout(() => { refreshAfterSet = false; sendCmd("GET_STATUS"); }, 500);
+  }
+  if (!detectThenRead) return;
+  if (/^OK the next cycle/.test(line)) {
+    detectThenRead = false;
+    log("Password reset; reading the meter to try every password…", "sys");
+    sendMeter('{"cmd":"read"}');
+  } else if (/^(ERR|BUSY)/.test(line)) {
+    detectThenRead = false;   // e.g. wrong device key: don't read
+  }
+}
+
+// Readings are newline-terminated JSON split to the MTU.
+function onData(text) {
+  dataBuf += text;
+  let nl;
+  while ((nl = dataBuf.indexOf("\n")) >= 0) {
+    const line = dataBuf.slice(0, nl).trim();
+    dataBuf = dataBuf.slice(nl + 1);
+    if (!line) continue;
+    let m;
+    try { m = JSON.parse(line); } catch { log(`bad data line: ${line}`, "er"); continue; }
+    if (m.t === "begin") { rows = []; rowsSrc = m.src; renderRows(`receiving from ${m.src}…`); }
+    else if (m.t === "r") { rows.push(m); renderRows(`receiving from ${rowsSrc}… ${rows.length}`); }
+    else if (m.t === "end") {
+      renderRows(`${rows.length} values from ${rowsSrc}, ret=${m.ret}`);
+      log(`meter ◀ end ret=${m.ret} n=${m.n}`, m.ret === 0 ? "ok" : "er");
+    }
+  }
+}
+
+function onStatus(text) {
+  let s;
+  try { s = JSON.parse(text); } catch { return; }
+  $("stState").textContent = s.state;
+  $("stState").style.color = s.state === "error" ? "var(--err)" : s.state === "reading" ? "var(--warn)" : "var(--ok)";
+  $("stRet").textContent = s.ret;
+  $("stN").textContent = s.n;
+  $("stAge").textContent = s.age < 0 ? "never" : fmtAge(s.age);
+  $("stInterval").textContent = `${s.interval} s`;
+  $("stProfile").textContent = `${s.profile} min`;
+  if (document.activeElement !== $("inInterval")) $("inInterval").value = s.interval;
+  if (document.activeElement !== $("inProfile")) $("inProfile").value = s.profile;
+}
+
+function fmtAge(s) {
+  if (s < 60) return `${s} s`;
+  if (s < 3600) return `${Math.floor(s / 60)} min`;
+  return `${Math.floor(s / 3600)} h ${Math.floor(s % 3600 / 60)} min`;
+}
+
+function renderRows(info) {
+  $("rdInfo").textContent = info ? `— ${info}` : "";
+  const body = $("rdBody");
+  body.textContent = "";
+  for (const r of rows) {
+    const tr = document.createElement("tr");
+    const val = r.v !== undefined ? String(+r.v.toFixed(4)) : r.s;
+    [[r.obis], [r.name], [val, r.v !== undefined ? "num" : ""], [r.u || ""]].forEach(([v, cls]) => {
+      const td = document.createElement("td");
+      td.textContent = v;
+      if (cls) td.className = cls;
+      tr.appendChild(td);
+    });
+    body.appendChild(tr);
+  }
+}
+
+// ── UI wiring ────────────────────────────────────────────────────────────
+$("btnConnect").onclick = connect;
+$("btnDisconnect").onclick = () => device && device.gatt.connected && device.gatt.disconnect();
+$("btnClear").onclick = () => { $("log").textContent = ""; };
+
+document.querySelectorAll("[data-meter]").forEach(b => b.onclick = () => sendMeter(b.dataset.meter));
+document.querySelectorAll("[data-cmd]").forEach(b => b.onclick = () => {
+  if (b.dataset.confirm && !confirm(b.dataset.confirm)) return;
+  sendCmd(b.dataset.auth ? withAuth(b.dataset.cmd) : b.dataset.cmd);
+});
+
+$("btnInterval").onclick = () => {
+  const s = parseInt($("inInterval").value, 10);
+  if (!(s >= 30 && s <= 86400)) { log("Reading interval must be 30..86400 s", "er"); return; }
+  sendMeter(JSON.stringify({ cmd: "interval", s }));
+};
+$("btnProfile").onclick = () => {
+  const m = parseInt($("inProfile").value, 10);
+  if (!(m >= 5 && m <= 1440 && 1440 % m === 0)) { log("Profile interval must divide 1440, 5..1440 min", "er"); return; }
+  sendMeter(JSON.stringify({ cmd: "profile", m }));
+};
+
+for (const id of Object.values(SET_FIELDS)) {
+  $(id).addEventListener("input", e => { e.target.dataset.dirty = "1"; markSetField(e.target); });
+}
+
+$("btnSet").onclick = () => {
+  const fields = { ...SET_FIELDS, secret: "sSecret" };
+  const pairs = [];
+  for (const [k, id] of Object.entries(fields)) {
+    const v = $(id).value.trim();
+    if (!v || v === $(id).dataset.loaded) continue;   // unchanged device value
+    if (/\s/.test(v)) { log(`${k}: no spaces allowed`, "er"); return; }
+    if (k === "secret" && !/^[0-9a-fA-F]{64}$/.test(v)) { log("secret must be 64 hex chars", "er"); return; }
+    pairs.push(`${k}=${v}`);
+  }
+  if (!pairs.length) { log("Nothing changed. Edit a SET field first.", "er"); return; }
+  sendCmd(withAuth(`SET ${pairs.join(" ")}`));
+  $("sSecret").value = "";
+  for (const id of Object.values(SET_FIELDS)) delete $(id).dataset.dirty;
+  refreshAfterSet = true;
+};
+
+$("btnPwAdd").onclick = () => {
+  const pw = $("pwAdd").value.trim();
+  if (!pw || /\s/.test(pw) || pw.length > 16) { log("Password: 1..16 chars, no spaces", "er"); return; }
+  sendCmd(withAuth(`METER_PW ADD ${pw}`));
+  $("pwAdd").value = "";
+};
+$("btnPwDel").onclick = () => {
+  const n = parseInt($("pwDel").value, 10);
+  if (!(n >= 1 && n <= 8)) { log("Pick a password number 1..8 (see LIST)", "er"); return; }
+  sendCmd(withAuth(`METER_PW DEL ${n}`));
+};
+
+$("btnDetectNow").onclick = () => {
+  if (!device || !device.gatt.connected) { log("Not connected. Click Connect first.", "er"); return; }
+  if (!ch.meterCmd) { log("Meter service not available, can't read after DETECT", "er"); return; }
+  detectThenRead = true;
+  sendCmd(withAuth("METER_PW DETECT"));
+};
+
+$("btnShowKey").onclick = () => {
+  const i = $("inAuth");
+  i.type = i.type === "password" ? "text" : "password";
+  $("btnShowKey").textContent = i.type === "password" ? "Show" : "Hide";
+};
+
+$("btnRaw").onclick = () => { sendCmd($("inRaw").value); $("inRaw").value = ""; };
+$("inRaw").addEventListener("keydown", e => { if (e.key === "Enter") $("btnRaw").click(); });
+
+setConnected(false);
+if (bleProblem()) {
+  $("noBle").classList.remove("hidden");
+  log(bleProblem(), "er");
+} else {
+  log("Click Connect and pick DLMS-Meter-XXXX", "sys");
+}
+</script>
+</body>
+</html>
