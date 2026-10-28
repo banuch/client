@@ -3,7 +3,11 @@
 //  http-server.js  --  REST API + web page (public/)
 //
 //    GET /api/health                                   no login
+//    GET /api/config                                   status thresholds, time zone, server time
+//    GET /api/fleet                                    status counts, activity today, needs attention
+//    GET /api/meters                                   every device with status, issues, key values
 //    GET /api/devices                                  all devices, newest first
+//    GET /api/devices/:id/stats?days=7                 message counts (per day) and log totals
 //    GET /api/devices/:id/latest                       latest reading with values
 //    GET /api/devices/:id/readings?from=&to=&limit=    reading list (no values)
 //    GET /api/devices/:id/readings?obis=&from=&to=&limit=   one value over time
@@ -23,6 +27,7 @@
 const path = require('path');
 const crypto = require('crypto');
 const express = require('express');
+const { SUMMARY_OBIS, buildMeters, countStatuses, attention, byFirmware, dayStart } = require('./meters');
 
 const DEVICE_ID = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$/;
 const OBIS = /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/;
@@ -100,9 +105,47 @@ function createHttpApp(cfg, { db, logs }) {
   });
 
   app.use(express.static(path.join(__dirname, '..', 'public'), { index: 'index.html' }));
+  // Chart library from node_modules: the CSP allows scripts from this server only.
+  const chartFile = path.join(path.dirname(require.resolve('chart.js')), 'chart.umd.js');
+  app.get('/vendor/chart.js', (req, res) => res.sendFile(chartFile));
 
   // ── API ──────────────────────────────────────────────────────────────────
   const api = express.Router();
+
+  const meterList = (now) => buildMeters(db.listDevices(), db.summaryValues(Object.values(SUMMARY_OBIS)), now, cfg);
+
+  api.get('/config', (req, res) => res.json({
+    timezone: cfg.timezone,
+    onlineAfterMin: cfg.onlineAfterMin,
+    offlineAfterMin: cfg.offlineAfterMin,
+    signing: cfg.masterSecret ? (cfg.requireSigned ? 'required' : 'checked') : 'off',
+    now: cfg.clock(),
+  }));
+
+  api.get('/meters', (req, res) => {
+    const now = cfg.clock();
+    const meters = meterList(now);
+    res.json({ now, counts: countStatuses(meters), meters });
+  });
+
+  api.get('/fleet', (req, res) => {
+    const now = cfg.clock();
+    const meters = meterList(now);
+    const from = dayStart(now, cfg.timezone);
+    const hours = db.activity(from, from + 24 * 3600 * 1000);
+    res.json({
+      now,
+      dayStart: from,
+      counts: countStatuses(meters),
+      hours,
+      readingsToday: hours.reduce((n, h) => n + h.readings, 0),
+      failedToday: hours.reduce((n, h) => n + h.failed, 0),
+      logsToday: hours.reduce((n, h) => n + h.logs, 0),
+      lastMessage: db.lastMessage(),
+      attention: attention(meters),
+      byFirmware: byFirmware(meters),
+    });
+  });
 
   api.get('/devices', (req, res) => res.json(db.listDevices()));
 
@@ -113,6 +156,14 @@ function createHttpApp(cfg, { db, logs }) {
 
   api.get('/devices/:id/latest', (req, res) => {
     res.json(db.latestReading(req.params.id));
+  });
+
+  // Per-day buckets start at midnight in cfg.timezone, `days` days back including today.
+  api.get('/devices/:id/stats', (req, res) => {
+    const now = cfg.clock();
+    const days = Math.min(Math.max(parseInt(req.query.days, 10) || 7, 1), 31);
+    const from = dayStart(now, cfg.timezone) - (days - 1) * 86400 * 1000;
+    res.json({ now, from, days, ...db.deviceStats(req.params.id, from, days) });
   });
 
   api.get('/devices/:id/readings', (req, res) => {

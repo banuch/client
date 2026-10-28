@@ -3,105 +3,59 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="AMR meter data: readings, profiles and device logs from the ESP32 meter readers">
   <title>AMR Data</title>
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="css/app.css">
 </head>
 <body>
-  <header class="top">
-    <h1>AMR Data</h1>
-    <span id="updated" class="muted"></span>
-  </header>
-  <main class="layout">
-    <section class="devices">
-      <input id="search" type="search" placeholder="Search IMEI" aria-label="Search devices">
-      <ul id="device-list" class="device-list"></ul>
-      <p id="no-devices" class="muted" hidden>No device has sent data yet.</p>
-    </section>
+  <svg width="0" height="0" class="icon-sprite" aria-hidden="true">
+    <symbol id="i-ok" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m9 9 6 6m0-6-6 6"/></symbol>
+    <symbol id="i-warn" viewBox="0 0 24 24"><path d="M12 3 2 20h20L12 3z"/><path d="M12 10v4m0 3v.01"/></symbol>
+    <symbol id="i-minus" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8 12h8"/></symbol>
+    <symbol id="i-grid" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></symbol>
+    <symbol id="i-meter" viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 7h8v4H8zM8 15h2m4 0h2"/></symbol>
+    <symbol id="i-inbox" viewBox="0 0 24 24"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5 5h14l3 7v7H2v-7z"/></symbol>
+    <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></symbol>
+    <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 11A8 8 0 1 0 18 17M20 5v6h-6"/></symbol>
+    <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v11m-5-5 5 5 5-5M5 20h14"/></symbol>
+    <symbol id="i-menu" viewBox="0 0 24 24"><path d="M3 6h18M3 12h18M3 18h18"/></symbol>
+  </svg>
 
-    <section class="detail" id="detail" hidden>
-      <div class="detail-head">
-        <h2 id="d-title"></h2>
-        <div id="d-meta" class="muted"></div>
-      </div>
-      <nav class="tabs" role="tablist">
-        <button role="tab" data-tab="latest" aria-selected="true">Latest</button>
-        <button role="tab" data-tab="history" aria-selected="false">History</button>
-        <button role="tab" data-tab="profiles" aria-selected="false">Profiles</button>
-        <button role="tab" data-tab="readings" aria-selected="false">Readings</button>
-        <button role="tab" data-tab="log" aria-selected="false">Log</button>
+  <div class="shell" id="shell">
+    <aside class="sidebar" id="sidebar">
+      <div class="brand"><b aria-hidden="true">AMR</b><div><strong>AMR Data</strong><small>Meter readings &amp; device logs</small></div></div>
+      <nav class="nav" aria-label="Main">
+        <a href="#/home" data-nav="home"><svg class="i" aria-hidden="true"><use href="#i-grid"/></svg>Home</a>
+        <a href="#/meters" data-nav="meters"><svg class="i" aria-hidden="true"><use href="#i-meter"/></svg>Meters <span id="navAlert" class="count hidden" title="Meters offline or with a failed meter read"></span></a>
       </nav>
+      <div class="nav-foot" id="navFoot"></div>
+    </aside>
+    <div class="scrim" id="scrim"></div>
 
-      <div class="tab" id="tab-latest">
-        <p id="latest-meta" class="muted"></p>
-        <input id="value-filter" type="search" placeholder="Filter OBIS or name" aria-label="Filter values">
-        <div class="table-wrap">
-          <table>
-            <thead><tr><th>OBIS</th><th>Name</th><th class="num">Value</th><th>Unit</th></tr></thead>
-            <tbody id="latest-body"></tbody>
-          </table>
+    <div class="main">
+      <header class="topbar">
+        <button class="btn icon-only menu-btn" id="menuButton" type="button" aria-label="Open menu" aria-controls="sidebar" aria-expanded="false"><svg class="i" aria-hidden="true"><use href="#i-menu"/></svg></button>
+        <div class="crumb" id="crumb">Home</div>
+        <div class="global-search" id="globalSearch">
+          <svg class="i" aria-hidden="true"><use href="#i-search"/></svg>
+          <input id="globalSearchInput" type="search" autocomplete="off" placeholder="Find meter: IMEI, serial, manufacturer" aria-label="Find meter" aria-controls="searchResults" aria-expanded="false">
+          <div id="searchResults" class="search-results hidden" role="listbox"></div>
         </div>
-      </div>
+        <div class="updated" id="updated" role="status" aria-live="polite"></div>
+        <button class="btn" id="refreshButton" type="button" title="Reload this page's data"><svg class="i" aria-hidden="true"><use href="#i-refresh"/></svg><span class="label">Refresh</span></button>
+      </header>
 
-      <div class="tab" id="tab-history" hidden>
-        <div class="controls">
-          <select id="obis-select" aria-label="Value"></select>
-          <select id="range-select" aria-label="Range">
-            <option value="1">Last 24 h</option>
-            <option value="7" selected>Last 7 days</option>
-            <option value="30">Last 30 days</option>
-          </select>
-        </div>
-        <svg id="chart" class="chart" role="img" aria-label="Value over time"></svg>
-        <div class="table-wrap">
-          <table>
-            <thead><tr><th>Read at</th><th class="num">Value</th><th>Unit</th></tr></thead>
-            <tbody id="history-body"></tbody>
-          </table>
-        </div>
-      </div>
+      <div class="outdated hidden" id="outdated" role="alert"></div>
+      <main class="content" id="view" tabindex="-1"></main>
+    </div>
+  </div>
 
-      <div class="tab" id="tab-profiles" hidden>
-        <div class="controls">
-          <select id="profile-select" aria-label="Profile"></select>
-          <select id="profile-range" aria-label="Range">
-            <option value="1">Last 24 h</option>
-            <option value="7" selected>Last 7 days</option>
-            <option value="31">Last 31 days</option>
-            <option value="0">All</option>
-          </select>
-          <span id="profile-info" class="muted"></span>
-        </div>
-        <div class="table-wrap">
-          <table>
-            <thead id="profile-head"></thead>
-            <tbody id="profile-body"></tbody>
-          </table>
-        </div>
-      </div>
+  <div class="toasts" id="toasts" aria-live="polite"></div>
 
-      <div class="tab" id="tab-readings" hidden>
-        <div class="table-wrap">
-          <table>
-            <thead><tr><th>Read at</th><th>Received</th><th class="num">Values</th><th>Result</th><th>FW</th><th>Signed</th></tr></thead>
-            <tbody id="readings-body"></tbody>
-          </table>
-        </div>
-      </div>
-
-      <div class="tab" id="tab-log" hidden>
-        <div class="controls">
-          <select id="log-date" aria-label="Day"></select>
-          <button id="log-refresh" type="button">Refresh</button>
-          <span id="log-info" class="muted"></span>
-        </div>
-        <pre id="log-text" class="log"></pre>
-      </div>
-    </section>
-
-    <section class="detail empty" id="empty">
-      <p class="muted">Select a device.</p>
-    </section>
-  </main>
-  <script src="app.js"></script>
+  <script src="vendor/chart.js"></script>
+  <script type="module" src="js/main.js"></script>
 </body>
 </html>

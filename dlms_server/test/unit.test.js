@@ -153,3 +153,41 @@ test('reading: bad bodies', () => {
   assert.ok(!bad({ ret: 0, values: [{ obis: '1.0.1.8.0.255', v: 'x' }] }).ok);
   assert.ok(!bad({ ret: 0, values: [{ obis: '1.0.1.8.0.255', s: 'x'.repeat(300) }] }).ok);
 });
+
+// ── Meter list / fleet (meters.js) ────────────────────────────────────────
+const { buildMeters, countStatuses, attention, byFirmware, dayStart } = require('../src/meters');
+
+test('meters: status, issues and summary values', () => {
+  const cfg = { onlineAfterMin: 35, offlineAfterMin: 90, masterSecret: 'x'.repeat(16) };
+  const now = Date.UTC(2026, 9, 28, 12);
+  const min = 60000;
+  const devices = [
+    { id: 'A', lastSeen: now - 5 * min, fw: '2.0.6', verified: 1, lastReadAt: now - 5 * min, lastRet: 0 },
+    { id: 'B', lastSeen: now - 50 * min, fw: '2.0.6', verified: 1, lastReadAt: now - 50 * min, lastRet: 4 },
+    { id: 'C', lastSeen: now - 2 * 1440 * min, fw: '2.0.1', verified: 0, lastReadAt: now - 2 * 1440 * min, lastRet: 0 },
+    { id: 'D', lastSeen: now - min, fw: null, verified: 1, lastReadAt: null, lastRet: null },
+  ];
+  const values = [
+    { deviceId: 'A', obis: '0.0.96.1.0.255', num: null, unit: '', text: 'S1' },
+    { deviceId: 'A', obis: '1.0.1.7.0.255', num: 4.2, unit: 'kW', text: null },
+    { deviceId: 'A', obis: '9.9.9.9.9.255', num: 1, unit: '', text: null },
+  ];
+  const meters = buildMeters(devices, values, now, cfg);
+  assert.deepStrictEqual(meters.map((m) => m.status), ['online', 'delayed', 'offline', 'online']);
+  assert.strictEqual(meters[0].serial, 'S1');
+  assert.deepStrictEqual(meters[0].values, { kw: { num: 4.2, unit: 'kW' } });
+  assert.deepStrictEqual(meters[0].issues, []);
+  assert.deepStrictEqual(meters[1].issues.map((i) => i.code), ['delayed', 'read_failed']);
+  assert.deepStrictEqual(meters[2].issues.map((i) => i.code), ['offline', 'unsigned']);
+  assert.deepStrictEqual(meters[3].issues.map((i) => i.code), ['no_reading']);
+  assert.deepStrictEqual(countStatuses(meters), { total: 4, online: 2, delayed: 1, offline: 1, readFailed: 2, unsigned: 1 });
+  assert.deepStrictEqual(attention(meters).map((m) => m.id), ['C', 'B', 'D']);
+  assert.deepStrictEqual(byFirmware(meters).map((r) => [r.fw, r.total]), [['2.0.6', 2], ['2.0.1', 1], ['unknown', 1]]);
+});
+
+test('meters: day start in the configured time zone', () => {
+  // 01:30 IST on 29 Oct and 07:30 IST on 28 Oct
+  assert.strictEqual(dayStart(Date.UTC(2026, 9, 28, 20), 'Asia/Kolkata'), Date.UTC(2026, 9, 28, 18, 30));
+  assert.strictEqual(dayStart(Date.UTC(2026, 9, 28, 2), 'Asia/Kolkata'), Date.UTC(2026, 9, 27, 18, 30));
+  assert.strictEqual(dayStart(Date.UTC(2026, 9, 28, 2), 'UTC'), Date.UTC(2026, 9, 28));
+});

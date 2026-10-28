@@ -50,6 +50,10 @@ function loadConfig(overrides = {}) {
     logDir: path.join(dataDir, 'logs'),
     // Day boundaries of the log files and times on the page
     timezone: env.TIMEZONE || 'Asia/Kolkata',
+    // Device status on the page: online up to this many minutes since its
+    // last message (two 15-minute read cycles), then delayed, then offline.
+    onlineAfterMin: Number(env.ONLINE_AFTER_MIN || 35),
+    offlineAfterMin: Number(env.OFFLINE_AFTER_MIN || 90),
     retentionDays: Number(env.RETENTION_DAYS || 0), // 0 = keep everything
     // Limits
     maxHeaderBytes: Number(env.MAX_HEADER_BYTES || 4096),
@@ -74,6 +78,9 @@ function assertConfig(cfg) {
     problems.push('REQUIRE_SIGNED=true needs MASTER_SECRET (the OTA server\'s, at least 16 characters)');
   }
   if (cfg.masterSecret && cfg.masterSecret.length < 16) problems.push('MASTER_SECRET must be at least 16 characters');
+  if (!(cfg.onlineAfterMin > 0) || !(cfg.offlineAfterMin > cfg.onlineAfterMin)) {
+    problems.push('ONLINE_AFTER_MIN must be above 0 and OFFLINE_AFTER_MIN above ONLINE_AFTER_MIN');
+  }
   if (problems.length) {
     throw new Error('Invalid configuration:\n  - ' + problems.join('\n  - ') +
       '\nCopy .env.example to .env and fill it in.');

@@ -294,3 +294,53 @@ test('retention removes old readings and keeps the newest', async () => {
     assert.ok((await get(s, `/api/devices/${IMEI}/latest`)).body);
   });
 });
+
+test('overview endpoints: config, meters, fleet, stats, chart library', async () => {
+  let now = Date.UTC(2026, 9, 28, 6);   // 11:30 IST
+  await withServer({ clock: () => now }, async (s) => {
+    const failed = { ret: 4, values: [] };
+    await send(s.tcpPort, Buffer.concat([
+      buildMessage({ type: 'READING', deviceId: IMEI, boot: 1, seq: 0, fw: '2.0.6', ageS: 60, body: JSON.stringify(READING), key: KEY }),
+    ]), 1);
+    now += 15 * 60000;
+    await send(s.tcpPort, Buffer.concat([
+      buildMessage({ type: 'READING', deviceId: IMEI, boot: 1, seq: 1, fw: '2.0.6', ageS: 0, body: JSON.stringify(failed), key: KEY }),
+      buildMessage({ type: 'LOG', deviceId: IMEI, boot: 1, seq: 0, dropped: 3, uptimeS: 900, body: 'x\r\n', key: KEY }),
+    ]), 2);
+
+    const config = await get(s, '/api/config');
+    assert.deepStrictEqual({ ...config.body, now: 0 }, { timezone: 'Asia/Kolkata', onlineAfterMin: 35, offlineAfterMin: 90, signing: 'checked', now: 0 });
+
+    const meters = await get(s, '/api/meters');
+    assert.strictEqual(meters.body.counts.total, 1);
+    const m = meters.body.meters[0];
+    assert.strictEqual(m.serial, 'X1234567');
+    assert.strictEqual(m.status, 'online');
+    assert.strictEqual(m.lastRet, 4);
+    assert.deepStrictEqual(m.issues.map((i) => i.code), ['read_failed']);
+
+    now += 60 * 60000;
+    const fleet = await get(s, '/api/fleet');
+    assert.strictEqual(fleet.body.counts.delayed, 1);
+    assert.strictEqual(fleet.body.dayStart, Date.UTC(2026, 9, 27, 18, 30));
+    assert.strictEqual(fleet.body.hours.length, 24);
+    assert.deepStrictEqual(fleet.body.hours[11], { readings: 2, failed: 1, logs: 1 });
+    assert.strictEqual(fleet.body.readingsToday, 2);
+    assert.deepStrictEqual(fleet.body.attention.map((a) => a.id), [IMEI]);
+    assert.deepStrictEqual(fleet.body.byFirmware, [{ fw: '2.0.6', online: 0, delayed: 1, offline: 0, total: 1 }]);
+
+    const stats = await get(s, `/api/devices/${IMEI}/stats?days=3`);
+    assert.strictEqual(stats.body.perDay.length, 3);
+    assert.deepStrictEqual(stats.body.perDay[2], { readings: 2, failed: 1 });
+    assert.strictEqual(stats.body.readings.n, 2);
+    assert.deepStrictEqual(stats.body.logs, { n: 1, bytes: 3, dropped: 3 });
+    assert.strictEqual(stats.body.lastLog.uptimeS, 900);
+    assert.strictEqual((await get(s, '/api/devices/nope/stats')).status, 404);
+
+    const chart = await fetch(`http://127.0.0.1:${s.httpPort}/vendor/chart.js`, {
+      headers: { Authorization: 'Basic ' + Buffer.from(`admin:${PASSWORD}`).toString('base64') },
+    });
+    assert.strictEqual(chart.status, 200);
+    assert.match(await chart.text(), /Chart/);
+  });
+});
