@@ -12,6 +12,7 @@
   "type": "commonjs",
   "dependencies": {
     "better-sqlite3": "^13.0.3",
+    "chart.js": "^4.6.1",
     "express": "^4.22.3"
   },
   "private": true,

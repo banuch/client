@@ -225,6 +225,57 @@ function openDb(file) {
     return { obis, name: c.name, cols: JSON.parse(c.cols), rows };
   }
 
+  // ── Queries for the overview pages ───────────────────────────────────────
+  // Values of each device's newest reading that has values (a failed cycle
+  // may carry none), limited to the given OBIS codes.
+  const summaryValuesStmt = db.prepare(`
+    SELECT d.id AS deviceId, v.obis, v.num, v.unit, v.text
+    FROM devices d JOIN reading_values v ON v.reading_id = (
+      SELECT r.id FROM readings r WHERE r.device_id = d.id AND r.value_count > 0 ORDER BY r.read_at DESC LIMIT 1)
+    WHERE v.obis IN (SELECT value FROM json_each(?))`);
+  const readingHoursStmt = db.prepare(`
+    SELECT CAST((received_at - @from) / 3600000 AS INTEGER) AS h, COUNT(*) AS n, SUM(ret != 0) AS failed
+    FROM readings WHERE received_at >= @from AND received_at < @to GROUP BY h`);
+  const logHoursStmt = db.prepare(`
+    SELECT CAST((received_at - @from) / 3600000 AS INTEGER) AS h, COUNT(*) AS n
+    FROM log_uploads WHERE received_at >= @from AND received_at < @to GROUP BY h`);
+  const lastMessageStmt = db.prepare('SELECT id, last_seen AS at FROM devices ORDER BY last_seen DESC LIMIT 1');
+  const readingDaysStmt = db.prepare(`
+    SELECT CAST((read_at - @from) / 86400000 AS INTEGER) AS d, COUNT(*) AS n, SUM(ret != 0) AS failed, COUNT(DISTINCT boot) AS boots
+    FROM readings WHERE device_id = @deviceId AND read_at >= @from GROUP BY d`);
+  const readingTotalsStmt = db.prepare(`
+    SELECT COUNT(*) AS n, COALESCE(SUM(ret != 0), 0) AS failed, COUNT(DISTINCT boot) AS boots,
+           AVG(received_at - read_at) AS avgDelayMs
+    FROM readings WHERE device_id = @deviceId AND read_at >= @from`);
+  const logTotalsStmt = db.prepare(`
+    SELECT COUNT(*) AS n, COALESCE(SUM(bytes), 0) AS bytes, COALESCE(SUM(dropped), 0) AS dropped
+    FROM log_uploads WHERE device_id = @deviceId AND received_at >= @from`);
+  const lastLogStmt = db.prepare(`
+    SELECT received_at AS at, uptime_s AS uptimeS, boot, verified FROM log_uploads
+    WHERE device_id = ? ORDER BY received_at DESC LIMIT 1`);
+
+  /** Readings and log uploads per hour in [from, to), one entry per hour. */
+  function activity(from, to) {
+    const hours = Array.from({ length: Math.ceil((to - from) / 3600000) }, () => ({ readings: 0, failed: 0, logs: 0 }));
+    for (const r of readingHoursStmt.all({ from, to })) Object.assign(hours[r.h], { readings: r.n, failed: r.failed });
+    for (const r of logHoursStmt.all({ from, to })) hours[r.h].logs = r.n;
+    return hours;
+  }
+
+  /** One device's message counts since `from`, readings also per day (days from `from`). */
+  function deviceStats(deviceId, from, days) {
+    const perDay = Array.from({ length: days }, () => ({ readings: 0, failed: 0 }));
+    for (const r of readingDaysStmt.all({ deviceId, from })) {
+      if (r.d < days) Object.assign(perDay[r.d], { readings: r.n, failed: r.failed });
+    }
+    return {
+      readings: readingTotalsStmt.get({ deviceId, from }),
+      logs: logTotalsStmt.get({ deviceId, from }),
+      lastLog: lastLogStmt.get(deviceId) || null,
+      perDay,
+    };
+  }
+
   function latestReading(deviceId) {
     const d = deviceStmt.get(deviceId);
     if (!d) return undefined;
@@ -263,6 +314,10 @@ function openDb(file) {
     history: (p) => historyStmt.all(p),
     profiles,
     profileRows,
+    summaryValues: (obisList) => summaryValuesStmt.all(JSON.stringify(obisList)),
+    activity,
+    lastMessage: () => lastMessageStmt.get() || null,
+    deviceStats,
     prune,
     close: () => db.close(),
   };

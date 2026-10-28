@@ -61,15 +61,44 @@ upload the image on the OTA dashboard. To run it as a service, see
 
 ## Page
 
-- **Device list:** IMEI, last seen (green under 35 min, amber under 90 min, red
-  after that), firmware, signed/unsigned.
-- **Latest:** every value of the last read cycle, with a filter.
-- **History:** one numeric value over 24 h / 7 d / 30 d, as a chart and a table.
-- **Profiles:** block load, daily load, billing, instantaneous, event logs and
-  name plate as tables (FW 2.0.2). Wide profiles (billing, instantaneous) are
-  shown one line per column with the newest 12 entries side by side.
-- **Readings:** each read cycle with its result code and value count.
-- **Log:** the serial log of one day (last 256 KB).
+A device is **Online** when its last message (reading or log) is at most
+`ONLINE_AFTER_MIN` (35) minutes old, **Delayed** up to `OFFLINE_AFTER_MIN` (90),
+then **Offline**. Problems with the meter itself (last read cycle failed, logs
+but no readings, no reading for a long time, unsigned data while signatures are
+checked) are listed as issues next to the status.
+
+- **Home:** device counts by status, failed meter reads, readings per hour
+  today, the devices that need attention (most urgent first) and status by
+  device firmware.
+- **Meters:** every device with status, last message, last read result, V
+  R/Y/B, current, kW, kWh, firmware and issues; search, status filters,
+  sorting and paging. The search box at the top finds a meter from any page.
+- **Meter page** (header with status and banners, then tabs):
+  - *Instantaneous:* R/Y/B phase cards (V, A, PF, kW), frequency, kW / kvar /
+    kVA, voltage and current unbalance.
+  - *Energy & demand:* energy registers, maximum demand with its time from the
+    billing profile, time-of-day zones.
+  - *Meter info:* name plate, CT/PT ratio and periods, meter counters.
+  - *Trends:* voltage / current / PF / power / frequency / energy, or any
+    numeric value, over 24 h / 7 d / 30 d / a custom range; chart, table, CSV.
+  - *Load profile:* block load, daily load (with consumption per day),
+    instantaneous, name plate and other profiles; chart, table, CSV.
+  - *Billing:* consumption per billing period and MD charts, all billing
+    entries side by side, CSV.
+  - *Events:* all event logs merged, with category filter and the snapshot
+    values recorded with each event.
+  - *Communication:* read cycles per day, failure rate, delivery delay, boots,
+    log uploads and dropped log bytes (last 7 days).
+  - *All values, Read cycles, Device log:* the raw values of the last cycle,
+    every read cycle, and the serial log of one day (last 256 KB).
+
+Values of the latest reading are matched by OBIS code (`public/js/obis.js`,
+names as in `firmware/obis_names.h`) and shown with the unit the device sent.
+Server times are shown in `TIMEZONE`; profile times are the meter's own clock.
+The page refreshes every 30 s while visible (history tabs only when opened or
+changed) and warns when it has not refreshed for over a minute. It follows the
+system light/dark setting. Chart.js is served from `node_modules`, so the page
+loads nothing from other sites.
 
 ## Device protocol
 
@@ -163,7 +192,11 @@ rows are the exception (meter local time as text, see the table).
 | Call | Returns |
 |---|---|
 | `GET /api/health` | `{ok:true}` (no login) |
+| `GET /api/config` | `{timezone, onlineAfterMin, offlineAfterMin, signing, now}` |
+| `GET /api/meters` | `{now, counts, meters}`: each device with status, issues and key values of its newest reading with values |
+| `GET /api/fleet` | counts, readings / failed / logs per hour since midnight (`TIMEZONE`), last message, devices needing attention, status by firmware |
 | `GET /api/devices` | devices, last seen first |
+| `GET /api/devices/:id/stats?days=7` | read cycles (per day and total), failures, boots, delivery delay, log uploads, last log |
 | `GET /api/devices/:id/latest` | latest reading with all values, or `null` |
 | `GET /api/devices/:id/readings?from=&to=&limit=` | read cycles (default last 7 days, max 5000) |
 | `GET /api/devices/:id/readings?obis=1.0.32.7.0.255&from=&to=` | one value over time |
@@ -190,6 +223,7 @@ older readings and log files once an hour.
 | `src/log-store.js` | daily log files |
 | `src/tcp-server.js` | device port |
 | `src/http-server.js` | page, REST API, login |
+| `src/meters.js` | device status, issues, meter list and fleet summary |
 | `src/message.js` | builds device messages (tests, sample tool) |
-| `public/` | web page (no build step) |
+| `public/` | web page: ES modules, no build step (`js/main.js` router, `js/views/` pages and tabs) |
 | `tools/send-sample.js` | fake device |
