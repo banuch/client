@@ -272,7 +272,7 @@ test('registration: pending -> admin approves -> device decrypts its key and che
 
   let r = await dev.register();
   assert.strictEqual(r.status, 200);
-  assert.deepStrictEqual(r.body, { status: 'pending', retry_s: 600 });
+  assert.deepStrictEqual(r.body, { status: 'pending', retry_s: 120 });
   assert.strictEqual((await dev.register()).body.status, 'pending');
 
   // Waiting device is listed, cannot check yet even with the right key.

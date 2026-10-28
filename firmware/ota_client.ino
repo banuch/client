@@ -262,12 +262,14 @@ static String ota_download(const OtaOffer& offer, String& detail) {
 }
 
 // ── Scheduling ──────────────────────────────────────────────────────────────
-static void ota_scheduleNext(uint32_t seconds) {
-    if (seconds < CHECK_INTERVAL_MIN_S) seconds = CHECK_INTERVAL_MIN_S;
+static void ota_scheduleAfter(uint32_t seconds, uint32_t minS) {
+    if (seconds < minS) seconds = minS;
     if (seconds > 20UL * 86400UL) seconds = 20UL * 86400UL;   // keep the int32 millis compare valid
     g_ota.nextCheckMs = millis() + seconds * 1000UL;
     DEBUG_SERIAL.printf("[OTA] Next check in %lu s\n", (unsigned long)seconds);
 }
+
+static void ota_scheduleNext(uint32_t seconds) { ota_scheduleAfter(seconds, CHECK_INTERVAL_MIN_S); }
 
 bool ota_isDue() {
     return g_ota.checkRequested || (int32_t)(millis() - g_ota.nextCheckMs) >= 0;
@@ -309,7 +311,7 @@ void ota_run() {
     if (g_cfg.secret.length() != 64) {
         uint32_t wait = reg_run();
         if (wait) {
-            ota_scheduleNext(wait);
+            ota_scheduleAfter(wait, REGISTER_POLL_MIN_S);   // pending polls run below CHECK_INTERVAL_MIN_S
             g_ota.busy = false;
             return;
         }

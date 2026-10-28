@@ -14,7 +14,7 @@
 #include "trace_tee.h"
 
 // ── Firmware identity ───────────────────────────────────────────────────────
-#define FW_VERSION "2.0.5" // MAJOR.MINOR.PATCH -- bump before each release
+#define FW_VERSION "2.0.6" // MAJOR.MINOR.PATCH -- bump before each release
 
 // ── Debug output ────────────────────────────────────────────────────────────
 // OTA results go through the trace tee, so they also reach the data server.
@@ -96,7 +96,11 @@
 #define SERVER_REG_PUBKEY_HEX "049304e2db9c3b0840b16e77748a38287704591242a73677fffc197f09481b628df25330731b7b208ab604dbecfe41f8de11a9cfe779e7342ad4ca169c506d63e7"
 
 
-#define REGISTER_POLL_S 600UL // while waiting for approval (server may say otherwise)
+// While waiting for approval: ask again after the server's retry_s, but never
+// later than REGISTER_POLL_S nor sooner than REGISTER_POLL_MIN_S (the server
+// refuses more than one request per IMEI every 20 s).
+#define REGISTER_POLL_S 120UL
+#define REGISTER_POLL_MIN_S 60UL
 
 // ── Transfer limits ─────────────────────────────────────────────────────────
 #define OTA_CHUNK_SIZE 1024          // AT+QIRD request size

@@ -245,8 +245,8 @@ uint32_t reg_run() {
     g_ota.lastResult = "awaiting_approval";
     long retry = ota_jsonNum(resp, "retry_s");
     uint32_t wait = retry > 0 ? (uint32_t)retry : REGISTER_POLL_S;
-    if (wait < CHECK_INTERVAL_MIN_S) wait = CHECK_INTERVAL_MIN_S;
-    if (wait > 3600UL) wait = 3600UL;
+    if (wait < REGISTER_POLL_MIN_S) wait = REGISTER_POLL_MIN_S;
+    if (wait > REGISTER_POLL_S) wait = REGISTER_POLL_S;
     DEBUG_SERIAL.printf("[REG] Waiting for approval in the dashboard -- IMEI %s, key fingerprint %s\n",
                         g_ota.imei.c_str(), s_regFp.c_str());
     return wait;

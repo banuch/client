@@ -60,7 +60,7 @@ function loadConfig(overrides = {}) {
     // Automatic registration (POST /ota/register) -- see regkey.js
     registrationMode: parseRegistrationMode(process.env.REGISTRATION_MODE, process.env.AUTO_REGISTER),
     registerMaxPending: Number(process.env.REGISTER_MAX_PENDING || 500),
-    registerPollSec: Number(process.env.REGISTER_POLL_SEC || 600),
+    registerPollSec: Number(process.env.REGISTER_POLL_SEC || 120),
     regKeyFile: path.join(dataDir, 'server_reg_key.pem'),
     maxFirmwareBytes: Number(process.env.MAX_FIRMWARE_BYTES || 8 * 1024 * 1024),
     // Dashboard login
