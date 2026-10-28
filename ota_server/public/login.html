@@ -2,63 +2,145 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
 <title>OTA Console · Sign in</title>
 <link rel="stylesheet" href="style.css">
 </head>
-<body>
-<div class="login-wrap">
-  <div class="card login-card">
-    <div class="brand" style="padding:0;color:var(--text)"><span class="dot"></span> OTA Console</div>
-    <p class="muted" style="margin:6px 0 0">Sign in to manage firmware releases and devices.</p>
-    <form id="form" autocomplete="on">
-      <div id="err" class="alert hidden" role="alert"></div>
-      <label class="field">Username
-        <input name="username" autocomplete="username" required autofocus>
-      </label>
-      <label class="field">Password
-        <input name="password" type="password" autocomplete="current-password" required>
-      </label>
-      <button class="primary" id="btn">Sign in</button>
-    </form>
+<body class="login-page">
+<div class="login-bg" aria-hidden="true"></div>
+
+<!-- Modal sign-in dialog; it cannot be dismissed, the console needs a session. -->
+<dialog class="login" id="dlg" aria-labelledby="title" aria-describedby="subtitle">
+  <div class="login-head">
+    <div class="login-logo" aria-hidden="true">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
+    </div>
+    <h1 id="title">OTA Console</h1>
+    <p id="subtitle">Sign in to manage firmware releases and devices.</p>
   </div>
-</div>
+  <form id="form" class="login-form" autocomplete="on" novalidate>
+    <div id="err" class="alert hidden" role="alert" aria-live="assertive"></div>
+    <label class="field">Username
+      <input name="username" autocomplete="username" autocapitalize="none" spellcheck="false" required autofocus>
+    </label>
+    <label class="field">Password
+      <span class="pw">
+        <input name="password" id="password" type="password" autocomplete="current-password" required>
+        <button type="button" class="toggle" id="toggle" aria-controls="password" aria-pressed="false">Show</button>
+      </span>
+      <span id="caps" class="caps hidden">Caps Lock is on</span>
+    </label>
+    <button class="primary" id="btn" type="submit">Sign in</button>
+    <p class="login-note">Ask an administrator if you need an account or a password reset.</p>
+  </form>
+</dialog>
+
+<div class="login-foot">AMR · firmware updates and device registration</div>
+
 <script>
 (() => {
+  const dlg = document.getElementById('dlg');
   const form = document.getElementById('form');
   const err = document.getElementById('err');
   const btn = document.getElementById('btn');
+  const pw = form.password;
+  let lockTimer = null;
+
+  dlg.showModal();
+  // Escape must not close the dialog: there is nothing behind it. Browsers
+  // may ignore preventDefault on cancel, so reopen it if it closes anyway.
+  dlg.addEventListener('cancel', (e) => e.preventDefault());
+  dlg.addEventListener('close', () => {
+    dlg.showModal();
+    form.username.focus();
+  });
+
   // Already signed in? Go straight to the dashboard.
-  fetch('auth/me').then((r) => { if (r.ok) location.replace('./'); });
+  fetch('auth/me').then((r) => { if (r.ok) location.replace('./'); }).catch(() => {});
+
+  document.getElementById('toggle').addEventListener('click', (e) => {
+    const show = pw.type === 'password';
+    pw.type = show ? 'text' : 'password';
+    e.currentTarget.textContent = show ? 'Hide' : 'Show';
+    e.currentTarget.setAttribute('aria-pressed', String(show));
+    pw.focus();
+  });
+  const caps = document.getElementById('caps');
+  for (const type of ['keydown', 'keyup']) {
+    pw.addEventListener(type, (e) => caps.classList.toggle('hidden', !e.getModifierState?.('CapsLock')));
+  }
+  pw.addEventListener('blur', () => caps.classList.add('hidden'));
+
+  function showError(text) {
+    err.textContent = text;
+    err.classList.remove('hidden', 'shake');
+    void err.offsetWidth;   // restart the shake animation
+    err.classList.add('shake');
+  }
+
+  function busy(on) {
+    btn.disabled = on;
+    btn.innerHTML = on ? '<span class="spinner" aria-hidden="true"></span>Signing in…' : 'Sign in';
+  }
+
+  // Locked out: count down and keep the button disabled until it ends.
+  function lockout(seconds) {
+    clearInterval(lockTimer);
+    let left = seconds;
+    const tick = () => {
+      if (left <= 0) {
+        clearInterval(lockTimer);
+        err.classList.add('hidden');
+        btn.disabled = false;
+        return;
+      }
+      const m = Math.floor(left / 60), s = left % 60;
+      err.textContent = `Too many failed attempts. Try again in ${m ? `${m} min ` : ''}${s} s.`;
+      btn.disabled = true;
+      left--;
+    };
+    showError('');
+    tick();
+    lockTimer = setInterval(tick, 1000);
+  }
 
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
+    const username = form.username.value.trim();
+    if (!username || !pw.value) {
+      showError('Enter your username and password.');
+      (username ? pw : form.username).focus();
+      return;
+    }
     err.classList.add('hidden');
-    btn.disabled = true;
-    btn.textContent = 'Signing in…';
-    const f = new FormData(form);
+    busy(true);
+    let locked = false;
     try {
       const res = await fetch('auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-OTA-Console': '1' },
-        body: JSON.stringify({ username: f.get('username'), password: f.get('password') }),
+        body: JSON.stringify({ username, password: pw.value }),
       });
       const data = await res.json().catch(() => ({}));
-      if (res.ok) return location.replace('./');
-      if (data.error === 'locked') {
-        err.textContent = `Too many failed attempts. Try again in ${Math.ceil(data.retry_after_s / 60)} min.`;
-      } else {
-        err.textContent = 'Wrong username or password.';
+      if (res.ok) {
+        btn.textContent = 'Signed in';
+        return location.replace('./');
       }
-      err.classList.remove('hidden');
-      form.password.value = '';
-      form.password.focus();
+      if (data.error === 'locked') {
+        locked = true;
+        lockout(data.retry_after_s || 60);
+      } else {
+        showError('Wrong username or password.');
+      }
+      pw.value = '';
+      pw.focus();
     } catch (_) {
-      err.textContent = 'Server not reachable.';
-      err.classList.remove('hidden');
+      showError('Server not reachable. Check the connection and try again.');
     } finally {
-      btn.disabled = false;
-      btn.textContent = 'Sign in';
+      if (!locked) busy(false);
+      else btn.innerHTML = 'Sign in';
     }
   });
 })();
