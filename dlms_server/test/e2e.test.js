@@ -268,21 +268,67 @@ test('web page needs the password, locks out after repeated failures', async () 
   });
 });
 
-test('log out: dummy login is accepted by /logout only and never locks out', async () => {
-  await withServer({ loginMaxFails: 3 }, async (s) => {
+test('sign-in page: session cookie, log out, no browser login popup', async () => {
+  await withServer({}, async (s) => {
     const url = (p) => `http://127.0.0.1:${s.httpPort}${p}`;
-    const dummy = { Authorization: 'Basic ' + Buffer.from('signed-out:x').toString('base64') };
-    const challenge = await fetch(url('/logout'));
-    assert.strictEqual(challenge.status, 401);
-    assert.ok(challenge.headers.get('www-authenticate'));
-    assert.strictEqual((await fetch(url('/logout'), { headers: dummy })).status, 204);
-    for (let i = 0; i < 5; i++) {
-      const r = await fetch(url('/api/devices'), { headers: dummy });
-      assert.strictEqual(r.status, 401);
-      assert.ok(r.headers.get('www-authenticate'), 'browser asks for the password again');
+    const login = (body, headers = { 'X-AMR-Data': '1' }) => fetch(url('/auth/login'), {
+      method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body: JSON.stringify(body),
+    });
+
+    const page = await fetch(url('/'), { redirect: 'manual' });
+    assert.strictEqual(page.status, 302);
+    assert.strictEqual(page.headers.get('location'), '/login.html');
+    assert.strictEqual((await fetch(url('/login.html'))).status, 200);
+    for (const file of ['/js/login.js', '/css/login.css', '/css/app.css']) {
+      assert.strictEqual((await fetch(url(file))).status, 200, `${file} loads before sign-in`);
     }
-    assert.strictEqual((await get(s, '/api/devices')).status, 200, 'not locked out');
-    assert.strictEqual((await get(s, '/api/config')).body.login, true);
+    const api = await fetch(url('/api/meters'));
+    assert.strictEqual(api.status, 401);
+    assert.strictEqual(api.headers.get('www-authenticate'), null, 'no browser popup');
+
+    assert.strictEqual((await login({ username: 'admin', password: PASSWORD }, {})).status, 403, 'CSRF header needed');
+    assert.strictEqual((await login({ username: 'admin', password: 'wrong-password' })).status, 401);
+    const ok = await login({ username: 'admin', password: PASSWORD });
+    assert.strictEqual(ok.status, 200);
+    const setCookie = ok.headers.get('set-cookie');
+    assert.match(setCookie, /HttpOnly/);
+    assert.match(setCookie, /SameSite=Strict/);
+    const cookie = { Cookie: setCookie.split(';')[0] };
+
+    assert.strictEqual((await fetch(url('/api/meters'), { headers: cookie })).status, 200);
+    assert.strictEqual((await fetch(url('/'), { headers: cookie, redirect: 'manual' })).status, 200);
+    assert.deepStrictEqual(await (await fetch(url('/auth/me'), { headers: cookie })).json(), { username: 'admin' });
+
+    assert.strictEqual((await fetch(url('/auth/logout'), { method: 'POST', headers: { ...cookie, 'X-AMR-Data': '1' } })).status, 200);
+    assert.strictEqual((await fetch(url('/api/meters'), { headers: cookie })).status, 401, 'session ended');
+    assert.strictEqual((await fetch(url('/auth/me'), { headers: cookie })).status, 401);
+  });
+});
+
+test('sign-in page: lockout, idle sessions end, browsers cannot use Basic', async () => {
+  let now = Date.UTC(2026, 9, 1);
+  await withServer({ loginMaxFails: 3, sessionIdleSec: 60, clock: () => now }, async (s) => {
+    const url = (p) => `http://127.0.0.1:${s.httpPort}${p}`;
+    const login = (password) => fetch(url('/auth/login'), {
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'X-AMR-Data': '1' },
+      body: JSON.stringify({ username: 'admin', password }),
+    });
+
+    const basic = { Authorization: 'Basic ' + Buffer.from(`admin:${PASSWORD}`).toString('base64') };
+    assert.strictEqual((await fetch(url('/api/meters'), { headers: basic })).status, 200, 'scripts may use Basic');
+    assert.strictEqual((await fetch(url('/api/meters'), { headers: { ...basic, 'Sec-Fetch-Site': 'same-origin' } })).status, 401,
+      'a password the browser saved from the old popup does not count');
+
+    const cookie = { Cookie: (await login(PASSWORD)).headers.get('set-cookie').split(';')[0] };
+    now += 61 * 1000;
+    assert.strictEqual((await fetch(url('/api/meters'), { headers: cookie })).status, 401, 'idle session ended');
+
+    assert.strictEqual((await login('wrong-password')).status, 401);
+    assert.strictEqual((await login('wrong-password')).status, 401);
+    const locked = await login('wrong-password');
+    assert.strictEqual(locked.status, 429);
+    assert.ok((await locked.json()).retry_after_s > 0);
+    assert.strictEqual((await login(PASSWORD)).status, 429, 'locked even with the right password');
   });
 });
 

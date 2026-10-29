@@ -139,19 +139,15 @@ function initNav() {
   byId('refreshButton').addEventListener('click', () => runLoad('manual'));
 }
 
-// HTTP Basic has no real log out: /logout accepts a dummy login, so the
-// browser keeps that one instead of the real password.
-function logOut() {
+async function logOut() {
   loadController?.abort();
   clearTimeout(refreshTimer);
-  const xhr = new XMLHttpRequest();
-  xhr.open('GET', 'logout', true, 'signed-out', 'x');
-  xhr.onloadend = () => {
-    byId('shell').outerHTML = `<div class="state signed-out">${icon('lock')}<strong>You are signed out</strong>
-      <span>Close the browser if this is a shared computer.</span>
-      <a class="btn" href="./">Sign in again</a></div>`;
-  };
-  xhr.send();
+  try {
+    await fetch('auth/logout', { method: 'POST', headers: { 'X-AMR-Data': '1' } });
+  } catch {
+    // The session cookie stays; the sign-in page sends us back here if so.
+  }
+  location.replace('login.html');
 }
 
 // The fleet is small, so search filters the full meter list in the browser.
