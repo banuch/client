@@ -82,7 +82,7 @@
 #define OTA_HOST_DEFAULT "65.20.77.137"
 #define OTA_PORT_DEFAULT 7000
 #define APN_DEFAULT "airtelgprs.com"
-#define CHECK_INTERVAL_DEFAULT_S 86400UL // 24 h; the server may override per device
+#define CHECK_INTERVAL_DEFAULT_S  600L // 24 h; the server may override per device
 #define CHECK_INTERVAL_MIN_S 300UL
 #define CHECK_RETRY_S 900UL        // after a failed check / download
 #define BOOT_CHECK_DELAY_MS 5000UL // after the modem attaches
