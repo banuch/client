@@ -242,14 +242,12 @@ void lb_upload()
   unsigned readings = 0;
   unsigned refused = 0;
   String notes;
+  //Before capture is turned off, so recovery steps reach the server log.
+  bool modemOk = modem_ensure();
   TraceLog.setCapture(false);
   MODEM_DEBUG.printf("\r\n[DATA] Uploading %u readings + %u log bytes, seq %lu\r\n",
                      (unsigned)rd_waiting(), (unsigned)total, (unsigned long)g_lbSeq);
-  if (!g_ota.modemReady)
-  {
-    g_ota.modemReady = modem_init();
-  }
-  bool ok = g_ota.modemReady && modem_tcpOpen(DATA_SERVER_HOST, DATA_SERVER_PORT);
+  bool ok = modemOk && modem_tcpOpen(DATA_SERVER_HOST, DATA_SERVER_PORT);
   if (ok)
   {
     for (RdItem* item = rd_peek(); ok && item != NULL; item = rd_peek())

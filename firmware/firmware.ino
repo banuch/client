@@ -40,6 +40,7 @@
 #include "obis_names.h"
 #include "ble_meter.h"
 #include "trace_tee.h"
+#include "reset_reason.h"
 
 #if !defined(ARDUINO_ARCH_ESP32)
 #error "This sketch is configured for ESP32-S3. Select an ESP32-S3 board."
@@ -1696,6 +1697,7 @@ void setup() {
   //tell the OTA server whether the new image booted.
   const esp_partition_t* run = esp_ota_get_running_partition();
   TraceSerial.printf("\r\nFirmware %s (partition %s)\r\n", FW_VERSION, run ? run->label : "?");
+  TraceSerial.printf("Restart reason: %s\r\n", resetReasonText());
   modem_hwInit();
   g_ota.modemReady = modem_init();
   if (g_ota.modemReady)

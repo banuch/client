@@ -296,16 +296,14 @@ void ota_run() {
     g_ota.lastCheckMs = millis();
     DEBUG_SERIAL.printf("\n[OTA] --- check (running %s, IMEI %s) ---\n", FW_VERSION, g_ota.imei.c_str());
 
-    if (!g_ota.modemReady) {
-        g_ota.modemReady = modem_init();
-        if (!g_ota.modemReady) {
-            g_ota.lastResult = "modem_not_ready";
-            ota_scheduleNext(CHECK_RETRY_S);
-            g_ota.busy = false;
-            return;
-        }
-        ota_reportBootResult();
+    bool wasReady = g_ota.modemReady;
+    if (!modem_ensure()) {
+        g_ota.lastResult = "modem_not_ready";
+        ota_scheduleNext(CHECK_RETRY_S);
+        g_ota.busy = false;
+        return;
     }
+    if (!wasReady) ota_reportBootResult();
 
     // No device key yet: ask the server for one (automatic registration).
     if (g_cfg.secret.length() != 64) {
