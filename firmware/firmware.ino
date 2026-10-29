@@ -89,6 +89,7 @@ typedef struct
   signed char scaler;
   unsigned char unit;
   unsigned char scalerRead;
+  unsigned char scalerTries; // failed scaler reads (av_readScalers)
 } AvEntry;
 
 // One capture column of a profile generic (see profiles.ino). e holds the
@@ -1219,6 +1220,7 @@ static int av_parse(gxByteBuffer* data)
     e->scaler = 0;
     e->unit = 0;
     e->scalerRead = 0;
+    e->scalerTries = 0;
   }
   var_clear(&value);
   return ret;
@@ -1280,7 +1282,11 @@ static int av_readAttribute(const AvEntry* e, unsigned char attributeOrdinal, dl
   return readAttribute(e->classId, e->ln, attributeOrdinal, NULL, value);
 }
 
-//Read scaler and unit of all registers once. Value = raw * 10^scaler.
+//Read scaler and unit of the registers that don't have them yet. Value =
+//raw * 10^scaler. Called every cycle: a read that failed (a garbled reply,
+//e.g. L&T error 270) is tried again, at most AV_SCALER_TRIES times, so the
+//value isn't sent unscaled until the next reboot.
+#define AV_SCALER_TRIES 3
 static int av_readScalers()
 {
   int ret = 0;
@@ -1290,7 +1296,7 @@ static int av_readScalers()
   for (uint16_t pos = 0; pos != g_avCount; ++pos)
   {
     AvEntry* e = &g_av[pos];
-    if (!hasScaler(e->classId))
+    if (!hasScaler(e->classId) || e->scalerRead || e->scalerTries >= AV_SCALER_TRIES)
     {
       continue;
     }
@@ -1308,6 +1314,10 @@ static int av_readScalers()
     else if (isLinkError(ret))
     {
       break;
+    }
+    else
+    {
+      ++e->scalerTries;
     }
     ret = 0;
   }
@@ -1574,6 +1584,10 @@ int com_readAllObjects(const char* invocationCounter, uint8_t flags)
     av_readScalers();
     av_print();
     g_avLoaded = true;
+  }
+  else if ((ret = av_readScalers()) != 0)
+  {
+    return ret;
   }
   unsigned char now[12];
   bool nowValid;

@@ -14,8 +14,11 @@
 //      sent (marker) to now. Without a marker, and always on a full read,
 //      the last PG_WINDOW_PERIODS periods, at least PG_MIN_WINDOW_S. Never
 //      further back than PG_MAX_BACK_S or PG_MAX_NEW_ROWS periods.
-//    - otherwise (billing, events, snapshots): plain read of the buffer,
-//      skipped when entries_in_use is above PG_PLAIN_MAX_ROWS.
+//      When the meter refuses the range (L&T) or sends no rows for it while
+//      nothing was sent yet (Genus), the newest rows are read by entry.
+//    - otherwise (billing, events, snapshots): plain read of the buffer.
+//      Above PG_PLAIN_MAX_ROWS entries: the newest rows by entry for
+//      profiles with a marker (Secure block load), else skipped.
 //
 //  Which profiles a cycle reads (CYCLE_* in config.h, schedule.ino decides):
 //    CYCLE_PROFILES  instantaneous, block load, billing, event logs
@@ -567,6 +570,28 @@ static int pg_rangeSelector(gxByteBuffer* bb, const PgColumn* clock,
   return 0;
 }
 
+//Selective access by entry (selector 2): rows first..last (1 = oldest),
+//all columns.
+static int pg_entrySelector(gxByteBuffer* bb, uint32_t first, uint32_t last)
+{
+  int ret;
+  if ((ret = bb_setUInt8(bb, 2)) != 0 ||
+      (ret = bb_setUInt8(bb, DLMS_DATA_TYPE_STRUCTURE)) != 0 ||
+      (ret = bb_setUInt8(bb, 4)) != 0 ||
+      (ret = bb_setUInt8(bb, DLMS_DATA_TYPE_UINT32)) != 0 ||
+      (ret = bb_setUInt32(bb, first)) != 0 ||
+      (ret = bb_setUInt8(bb, DLMS_DATA_TYPE_UINT32)) != 0 ||
+      (ret = bb_setUInt32(bb, last)) != 0 ||
+      (ret = bb_setUInt8(bb, DLMS_DATA_TYPE_UINT16)) != 0 ||
+      (ret = bb_setUInt16(bb, 1)) != 0 ||
+      (ret = bb_setUInt8(bb, DLMS_DATA_TYPE_UINT16)) != 0 ||
+      (ret = bb_setUInt16(bb, 0)) != 0)
+  {
+    return ret;
+  }
+  return 0;
+}
+
 //Read a uint attribute (capture period, entries). 0 if it can't be read.
 //Secure meters send the capture period as a big-endian octet-string
 //("03 84" = 900 s).
@@ -865,6 +890,49 @@ static uint16_t pg_collect(const AvEntry* p, PgKind kind, const PgColumn* cols, 
   return queued;
 }
 
+//Read the buffer with the given selective access (NULL = all), print it and
+//queue its new rows. rows = rows the meter sent.
+static int pg_readBuffer(const AvEntry* p, PgKind kind, const PgColumn* cols, uint16_t count,
+                         gxByteBuffer* access, bool byEntry, uint32_t period, uint32_t mark,
+                         const unsigned char* now, uint32_t nowS, bool full, unsigned* rows)
+{
+  dlmsVARIANT value;
+  var_init(&value);
+  *rows = 0;
+  if (full && byEntry)
+  {
+    TraceSerial.print("  Reading the newest entries\r\n");
+  }
+  uint32_t start = millis();
+  int ret = readAttribute(DLMS_OBJECT_TYPE_PROFILE_GENERIC, p->ln, 2, access, &value);
+  if (ret == 0)
+  {
+    uint32_t ms = millis() - start;
+    if (full)
+    {
+      TraceSerial.printf("  Buffer read in %lu ms\r\n", (unsigned long)ms);
+      pg_printBuffer(cols, count, &value, period, now);
+    }
+    uint16_t queued = pg_collect(p, kind, cols, count, &value, period, mark, nowS);
+    *rows = value.vt == DLMS_DATA_TYPE_ARRAY && value.Arr != NULL ? (unsigned)value.Arr->size : 0;
+    if (full)
+    {
+      TraceSerial.printf("  Rows queued for upload: %u\r\n", (unsigned)queued);
+    }
+    else
+    {
+      TraceSerial.printf("%3u rows read, %3u queued (%lu ms)\r\n", *rows, (unsigned)queued,
+                         (unsigned long)ms);
+    }
+  }
+  else
+  {
+    pg_printError("Buffer", ret);
+  }
+  var_clear(&value);
+  return ret;
+}
+
 //Read one profile, print it (table on full cycles, one line otherwise) and
 //queue its new rows. Only link errors are returned.
 static int pg_readProfile(const AvEntry* p, PgKind kind, const unsigned char* now, bool nowValid,
@@ -931,6 +999,13 @@ static int pg_readProfile(const AvEntry* p, PgKind kind, const unsigned char* no
   int tc = pg_timeColumn(cols, count, kind);
   bool byRange = period != 0 && tc >= 0 &&
                  cols[tc].e.classId == DLMS_OBJECT_TYPE_CLOCK && haveNow;
+  //Some meters refuse selective access by range (L&T: no access), answer it
+  //with no rows (Genus) or have no clock column to range on (Secure block
+  //load). Then the newest rows are read by entry instead: entries rows,
+  //0 = none. Once that worked, the profile is read by entry until reboot.
+  static uint8_t s_byEntry = 0;
+  const uint8_t kindBit = (uint8_t)(1u << kind);
+  uint32_t entries = 0;
   if (byRange)
   {
     unsigned char start[12], end[12];
@@ -969,53 +1044,76 @@ static int pg_readProfile(const AvEntry* p, PgKind kind, const unsigned char* no
     }
     dtFromSeconds(fromS, now, start);
     dtFromSeconds(nowS + period, now, end);
-    if (full)
+    if (pg_hasMarker(kind))
     {
-      dtText(start, from, sizeof(from));
-      dtText(end, to, sizeof(to));
-      TraceSerial.printf("  Reading range %s .. %s\r\n", from, to);
+      entries = (fromS < nowS ? (nowS - fromS) / period : 0) + 2;
     }
-    ret = pg_rangeSelector(&access, &cols[tc], start, end);
-  }
-  else if (inUse > PG_PLAIN_MAX_ROWS)
-  {
-    TraceSerial.printf("  Skipped: %lu entries is too many for a plain read (limit %u)\r\n",
-                       (unsigned long)inUse, (unsigned)PG_PLAIN_MAX_ROWS);
-    free(cols);
-    return 0;
-  }
-  if (ret == 0)
-  {
-    dlmsVARIANT value;
-    var_init(&value);
-    uint32_t start = millis();
-    ret = readAttribute(DLMS_OBJECT_TYPE_PROFILE_GENERIC, p->ln, 2,
-                        byRange ? &access : NULL, &value);
-    if (ret == 0)
+    if (s_byEntry & kindBit)
     {
-      uint32_t ms = millis() - start;
-      if (full)
-      {
-        TraceSerial.printf("  Buffer read in %lu ms\r\n", (unsigned long)ms);
-        pg_printBuffer(cols, count, &value, period, now);
-      }
-      uint16_t queued = pg_collect(p, kind, cols, count, &value, period, mark, nowS);
-      unsigned rows = value.vt == DLMS_DATA_TYPE_ARRAY && value.Arr != NULL ? (unsigned)value.Arr->size : 0;
-      if (full)
-      {
-        TraceSerial.printf("  Rows queued for upload: %u\r\n", (unsigned)queued);
-      }
-      else
-      {
-        TraceSerial.printf("%3u rows read, %3u queued (%lu ms)\r\n", rows, (unsigned)queued,
-                           (unsigned long)ms);
-      }
+      byRange = false;
     }
     else
     {
-      pg_printError("Buffer", ret);
+      if (full)
+      {
+        dtText(start, from, sizeof(from));
+        dtText(end, to, sizeof(to));
+        TraceSerial.printf("  Reading range %s .. %s\r\n", from, to);
+      }
+      ret = pg_rangeSelector(&access, &cols[tc], start, end);
     }
-    var_clear(&value);
+  }
+  else if (inUse > PG_PLAIN_MAX_ROWS)
+  {
+    if (!pg_hasMarker(kind))
+    {
+      TraceSerial.printf("  Skipped: %lu entries is too many for a plain read (limit %u)\r\n",
+                         (unsigned long)inUse, (unsigned)PG_PLAIN_MAX_ROWS);
+      free(cols);
+      return 0;
+    }
+    //No range possible: the newest rows, as many as a range read would get.
+    entries = period != 0 && haveNow
+              ? (mark != 0 && mark < nowS ? (nowS - mark) / period : PG_MIN_WINDOW_S / period) + 2
+              : PG_PLAIN_MAX_ROWS;
+  }
+  if (entries > PG_MAX_NEW_ROWS)
+  {
+    entries = PG_MAX_NEW_ROWS;
+  }
+  if (entries > inUse)
+  {
+    entries = inUse;
+  }
+  if (ret == 0)
+  {
+    bool byEntry = !byRange && entries != 0;
+    if (byEntry)
+    {
+      ret = pg_entrySelector(&access, inUse - entries + 1, inUse);
+    }
+    unsigned rows = 0;
+    if (ret == 0)
+    {
+      ret = pg_readBuffer(p, kind, cols, count, byRange || byEntry ? &access : NULL, byEntry,
+                          period, mark, now, nowS, full, &rows);
+    }
+    //Range refused, or empty while nothing was ever sent: try by entry.
+    if (byRange && entries != 0 &&
+        (ret == DLMS_ERROR_CODE_READ_WRITE_DENIED || (ret == 0 && rows == 0 && mark == 0)))
+    {
+      if (!full)
+      {
+        TraceSerial.printf("  %-26s ", "  ... by entry");
+      }
+      bb_clear(&access);
+      if ((ret = pg_entrySelector(&access, inUse - entries + 1, inUse)) == 0 &&
+          (ret = pg_readBuffer(p, kind, cols, count, &access, true, period, mark, now, nowS,
+                               full, &rows)) == 0 && rows != 0)
+      {
+        s_byEntry |= kindBit;
+      }
+    }
   }
   bb_clear(&access);
   free(cols);
