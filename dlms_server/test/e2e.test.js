@@ -268,6 +268,24 @@ test('web page needs the password, locks out after repeated failures', async () 
   });
 });
 
+test('log out: dummy login is accepted by /logout only and never locks out', async () => {
+  await withServer({ loginMaxFails: 3 }, async (s) => {
+    const url = (p) => `http://127.0.0.1:${s.httpPort}${p}`;
+    const dummy = { Authorization: 'Basic ' + Buffer.from('signed-out:x').toString('base64') };
+    const challenge = await fetch(url('/logout'));
+    assert.strictEqual(challenge.status, 401);
+    assert.ok(challenge.headers.get('www-authenticate'));
+    assert.strictEqual((await fetch(url('/logout'), { headers: dummy })).status, 204);
+    for (let i = 0; i < 5; i++) {
+      const r = await fetch(url('/api/devices'), { headers: dummy });
+      assert.strictEqual(r.status, 401);
+      assert.ok(r.headers.get('www-authenticate'), 'browser asks for the password again');
+    }
+    assert.strictEqual((await get(s, '/api/devices')).status, 200, 'not locked out');
+    assert.strictEqual((await get(s, '/api/config')).body.login, true);
+  });
+});
+
 test('unknown device and bad parameters', async () => {
   await withServer({}, async (s) => {
     assert.strictEqual((await get(s, '/api/devices/nope/latest')).status, 404);
@@ -309,7 +327,7 @@ test('overview endpoints: config, meters, fleet, stats, chart library', async ()
     ]), 2);
 
     const config = await get(s, '/api/config');
-    assert.deepStrictEqual({ ...config.body, now: 0 }, { timezone: 'Asia/Kolkata', onlineAfterMin: 35, offlineAfterMin: 90, signing: 'checked', now: 0 });
+    assert.deepStrictEqual({ ...config.body, now: 0 }, { timezone: 'Asia/Kolkata', onlineAfterMin: 35, offlineAfterMin: 90, signing: 'checked', login: true, now: 0 });
 
     const meters = await get(s, '/api/meters');
     assert.strictEqual(meters.body.counts.total, 1);
