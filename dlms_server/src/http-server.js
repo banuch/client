@@ -23,6 +23,7 @@
 //  Login: HTTP Basic with VIEW_USER / VIEW_PASSWORD. Without a password the
 //  page has no login and config.js binds it to 127.0.0.1 only. After
 //  LOGIN_MAX_FAILS wrong passwords an IP is locked out for LOGIN_LOCK_SEC.
+//  GET /logout (no login) is used by the page's Log out button, see below.
 // =============================================================================
 const path = require('path');
 const crypto = require('crypto');
@@ -32,6 +33,7 @@ const { SUMMARY_OBIS, buildMeters, countStatuses, attention, byFirmware, dayStar
 const DEVICE_ID = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$/;
 const OBIS = /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/;
 const ROW_TIME = /^\d{4}-\d\d-\d\d( \d\d:\d\d(:\d\d)?)?$/;
+const LOGOUT_USER = 'signed-out';
 
 /** A profile row time bound, null if absent, undefined if malformed. A bare date as "to" includes that day. */
 function parseRowTime(v, isTo) {
@@ -73,6 +75,22 @@ function createHttpApp(cfg, { db, logs }) {
   app.get('/api/health', (req, res) => res.json({ ok: true }));
 
   // ── Login ────────────────────────────────────────────────────────────────
+  // Log out: the page sends LOGOUT_USER to /logout, which accepts it, so the
+  // browser stores that login in place of the real one. Afterwards the
+  // browser sends LOGOUT_USER everywhere, which is treated as "not signed in".
+  const basicUser = (req) => {
+    const m = /^Basic ([A-Za-z0-9+/=]+)$/.exec(req.get('authorization') || '');
+    if (!m) return null;
+    const text = Buffer.from(m[1], 'base64').toString('utf8');
+    const colon = text.indexOf(':');
+    return colon === -1 ? { user: text, pass: '' } : { user: text.slice(0, colon), pass: text.slice(colon + 1) };
+  };
+  app.get('/logout', (req, res) => {
+    if (basicUser(req)?.user === LOGOUT_USER) return res.status(204).end();
+    res.set('WWW-Authenticate', 'Basic realm="AMR data", charset="UTF-8"');
+    return res.status(401).json({ error: 'login_required' });
+  });
+
   const fails = new Map();   // ip -> {count, until}
   app.use((req, res, next) => {
     if (!cfg.viewPassword) return next();
@@ -83,12 +101,9 @@ function createHttpApp(cfg, { db, logs }) {
       res.set('Retry-After', String(Math.ceil((f.until - now) / 1000)));
       return res.status(429).json({ error: 'too_many_failed_logins' });
     }
-    const m = /^Basic ([A-Za-z0-9+/=]+)$/.exec(req.get('authorization') || '');
-    if (m) {
-      const text = Buffer.from(m[1], 'base64').toString('utf8');
-      const colon = text.indexOf(':');
-      const user = colon === -1 ? text : text.slice(0, colon);
-      const pass = colon === -1 ? '' : text.slice(colon + 1);
+    const login = basicUser(req);
+    if (login && login.user !== LOGOUT_USER) {
+      const { user, pass } = login;
       const ok = safeEqual(user, cfg.viewUser) & safeEqual(pass, cfg.viewPassword);
       if (ok) {
         fails.delete(ip);
@@ -119,6 +134,7 @@ function createHttpApp(cfg, { db, logs }) {
     onlineAfterMin: cfg.onlineAfterMin,
     offlineAfterMin: cfg.offlineAfterMin,
     signing: cfg.masterSecret ? (cfg.requireSigned ? 'required' : 'checked') : 'off',
+    login: Boolean(cfg.viewPassword),
     now: cfg.clock(),
   }));
 

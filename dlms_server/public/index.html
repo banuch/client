@@ -22,6 +22,7 @@
     <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 11A8 8 0 1 0 18 17M20 5v6h-6"/></symbol>
     <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v11m-5-5 5 5 5-5M5 20h14"/></symbol>
     <symbol id="i-menu" viewBox="0 0 24 24"><path d="M3 6h18M3 12h18M3 18h18"/></symbol>
+    <symbol id="i-logout" viewBox="0 0 24 24"><path d="M14 4h5v16h-5M10 8l-4 4 4 4M6 12h10"/></symbol>
   </svg>
 
   <div class="shell" id="shell">
@@ -46,6 +47,7 @@
         </div>
         <div class="updated" id="updated" role="status" aria-live="polite"></div>
         <button class="btn" id="refreshButton" type="button" title="Reload this page's data"><svg class="i" aria-hidden="true"><use href="#i-refresh"/></svg><span class="label">Refresh</span></button>
+        <button class="btn hidden" id="logoutButton" type="button" title="Sign out of this page"><svg class="i" aria-hidden="true"><use href="#i-logout"/></svg><span class="label">Log out</span></button>
       </header>
 
       <div class="outdated hidden" id="outdated" role="alert"></div>

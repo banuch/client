@@ -139,6 +139,21 @@ function initNav() {
   byId('refreshButton').addEventListener('click', () => runLoad('manual'));
 }
 
+// HTTP Basic has no real log out: /logout accepts a dummy login, so the
+// browser keeps that one instead of the real password.
+function logOut() {
+  loadController?.abort();
+  clearTimeout(refreshTimer);
+  const xhr = new XMLHttpRequest();
+  xhr.open('GET', 'logout', true, 'signed-out', 'x');
+  xhr.onloadend = () => {
+    byId('shell').outerHTML = `<div class="state signed-out">${icon('lock')}<strong>You are signed out</strong>
+      <span>Close the browser if this is a shared computer.</span>
+      <a class="btn" href="./">Sign in again</a></div>`;
+  };
+  xhr.send();
+}
+
 // The fleet is small, so search filters the full meter list in the browser.
 function initSearch() {
   const input = byId('globalSearchInput');
@@ -241,6 +256,10 @@ async function initialize() {
   byId('navFoot').innerHTML = `Online = message within ${esc(settings.onlineAfterMin)} min<br>
     Offline after ${esc(settings.offlineAfterMin)} min<br>Signatures ${esc(signing || settings.signing)}<br>
     Times in ${esc(zoneLabel())} (${esc(settings.timezone)})`;
+  if (settings.login) {
+    byId('logoutButton').classList.remove('hidden');
+    byId('logoutButton').addEventListener('click', logOut);
+  }
 
   document.addEventListener('visibilitychange', () => {
     updateOutdated();
