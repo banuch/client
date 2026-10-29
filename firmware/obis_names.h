@@ -209,8 +209,8 @@ static const ObisName OBIS_NAMES[] =
 
 static const size_t OBIS_NAMES_SIZE = sizeof(OBIS_NAMES) / sizeof(OBIS_NAMES[0]);
 
-// Event identifiers from IS 15959 Part 1 (2011) Tables 32-38 and
-// Part 3 (2017) Tables 5-10. "Occ" = occurrence, "Res" = restoration.
+// Event identifiers from IS 15959 Part 1 (2011) Tables 32-38, its
+// Amendment 2 (single phase, Tables 49-53) and Part 3 (2017) Tables 5-10. "Occ" = occurrence, "Res" = restoration.
 typedef struct
 {
   uint16_t id;
@@ -251,6 +251,8 @@ static const EventName EVENT_NAMES[] =
   {66,  "CT bypass - Res"},
   {67,  "Over current - Occ"},
   {68,  "Over current - Res"},
+  {69,  "Earth loading - Occ"},
+  {70,  "Earth loading - Res"},
   // Power related (0.0.96.11.2.255)
   {101, "Power failure - Occ"},
   {102, "Power failure - Res"},
@@ -279,6 +281,8 @@ static const EventName EVENT_NAMES[] =
   {204, "Neutral disturbance - Res"},
   {205, "Low PF - Occ"},
   {206, "Low PF - Res"},
+  {207, "Single wire operation - Occ"},
+  {208, "Single wire operation - Res"},
   {209, "Comm module removed - Occ"},
   {210, "Comm module removed - Res"},
   {215, "Overload - Occ"},
