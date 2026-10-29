@@ -273,14 +273,16 @@ export function createProfilesTab({ id }) {
     select.innerHTML = metrics.map((m) => `<option value="${esc(m.key)}">${esc(m.label)}</option>`).join('');
     select.value = state.metric;
     const metric = metrics.find((m) => m.key === state.metric);
+    const daily = profile.obis === PROFILE.daily;
     let points = timed;
     let data = metric.cols.map((c) => timed.map((r) => (typeof r.c[c.i] === 'number' ? r.c[c.i] : null)));
     if (metric.delta) {
       // Change from the previous row; the first row has no previous one.
       data = data.map((values) => values.slice(1).map((v, i) => (v !== null && values[i] !== null ? v - values[i] : null)));
-      points = timed.slice(1);
+      // Daily rows are logged at 00:00 (IS 15959 Table 26 note 1), so the
+      // change up to a row is the previous row's day.
+      points = daily ? timed.slice(0, -1) : timed.slice(1);
     }
-    const daily = profile.obis === PROFILE.daily;
     chart = drawChart(box, {
       labels: points.map((r) => (daily ? r.t.slice(0, 10) : r.t.slice(5, 16))),
       series: metric.cols.map((c, i) => ({ label: metric.cols.length > 1 ? `${'RYB'[i]} phase` : metric.label, data: data[i].map((v) => (v === null ? null : Number(v.toFixed(4)))), phase: metric.phase })),
