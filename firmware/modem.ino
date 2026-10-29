@@ -9,14 +9,26 @@
 //    - quiet window between closing one socket and opening the next
 //  New here: modem_tcpRead() parses the AT+QIRD reply byte-by-byte, so binary
 //  firmware data (which can contain "\r\n", "OK", NULs...) is never mangled
-//  by String-based searching.
+//  by String-based searching. modem_ensure() (FW 2.0.9) checks the module
+//  before each use and powers it back on with PWRKEY when it went off.
 // =============================================================================
 
 static uint32_t s_lastSocketCloseMs = 0;
+static bool s_modemDown = false;   // set when the module reported a power-down or restart
 
 // ── Low-level helpers ───────────────────────────────────────────────────────
+// Drop leftover bytes. Among them, notices that the module switched off or
+// restarted by itself (POWERED DOWN, under-voltage, a fresh RDY) mark it
+// down: the next modem_ensure() brings it back.
 static void modem_drain() {
-    while (MODEM.available()) MODEM.read();
+    String s;
+    while (MODEM.available()) s += (char)MODEM.read();
+    if (s.indexOf("POWERED DOWN") != -1 || s.indexOf("UNDER_VOLTAGE") != -1 ||
+        s.indexOf("vbatt\",-2") != -1 || s.startsWith("RDY") || s.indexOf("\nRDY") != -1) {
+        s.trim();
+        TraceSerial.printf("\r\n[MDM] Modem notice: %s\r\n", s.substring(0, 120).c_str());
+        s_modemDown = true;
+    }
 }
 
 // Send a command and collect the reply until OK / ERROR / timeout.
@@ -102,6 +114,7 @@ bool modem_init() {
     }
     modem_atCollect("ATE0", 1000);
     modem_atCollect("AT+CMEE=2", 1000);
+    modem_atCollect("AT+QSCLK=0", 1000);   // never sleep: the UART must answer at any time
 
     if (g_ota.imei.isEmpty()) g_ota.imei = modem_readImei();
     MODEM_DEBUG.printf("[MDM] IMEI: %s\n", g_ota.imei.isEmpty() ? "(unreadable)" : g_ota.imei.c_str());
@@ -132,6 +145,87 @@ bool modem_init() {
     }
     MODEM_DEBUG.println("[MDM] Attached, PDP active");
     return true;
+}
+
+// ── Health check and recovery ───────────────────────────────────────────────
+// A module that switched itself off (supply dip, under-voltage) never answers
+// AT again; only PWRKEY brings it back. MODEM_WAKE_PIN drives PWRKEY through a
+// transistor (HIGH = key pressed). A pulse turns an off module on but also a
+// running one off, and no STATUS pin tells which: hence up to two pulses, and
+// none while the module still answers AT (then only the network is down).
+#define MODEM_PWRKEY_MS        800UL
+#define MODEM_BOOT_WAIT_MS     20000UL
+#define MODEM_RESTART_AFTER_MS (2UL * 3600UL * 1000UL)   // then restart the ESP32
+
+static uint32_t s_modemFailSince = 0;   // millis() since the module stays silent, 0 = it answers
+
+static bool modem_alive(int tries) {
+    for (int i = 0; i < tries; i++) {
+        if (modem_atOk("AT", 1000)) return true;
+    }
+    return false;
+}
+
+static void modem_pwrkeyPulse() {
+    digitalWrite(MODEM_WAKE_PIN, HIGH);
+    delay(MODEM_PWRKEY_MS);
+    digitalWrite(MODEM_WAKE_PIN, LOW);
+}
+
+// After a pulse: true once the module answers AT, false after MODEM_BOOT_WAIT_MS.
+static bool modem_waitBoot() {
+    uint32_t t = millis();
+    while (millis() - t < MODEM_BOOT_WAIT_MS) {
+        if (modem_atOk("AT", 1000)) return true;
+        delay(500);
+    }
+    return false;
+}
+
+// Make sure the modem is up before a TCP connection; sets g_ota.modemReady.
+// Steps are printed on TraceSerial so they reach the server log once the
+// link is back. Readings stay queued while it fails.
+bool modem_ensure() {
+    //s_modemDown is checked again: modem_alive() may just have read a RDY.
+    if (g_ota.modemReady && !s_modemDown && modem_alive(3) && !s_modemDown) {
+        s_modemFailSince = 0;
+        return true;
+    }
+    if (g_ota.modemReady || s_modemDown) {
+        TraceSerial.print("\r\n[MDM] Modem not answering, recovering\r\n");
+    }
+    s_modemDown = false;
+    bool ok = modem_init();
+    for (int pulse = 1; !ok && pulse <= 2 && !modem_alive(3); pulse++) {
+        TraceSerial.printf("\r\n[MDM] No AT response: PWRKEY pulse %d\r\n", pulse);
+        modem_pwrkeyPulse();
+        if (modem_waitBoot()) {
+            s_modemDown = false;   // its own RDY after the pulse
+            ok = modem_init();
+        }
+    }
+    g_ota.modemReady = ok;
+    if (ok) {
+        if (s_modemFailSince != 0) TraceSerial.print("\r\n[MDM] Modem recovered\r\n");
+        s_modemFailSince = 0;
+        return true;
+    }
+    //A restart loses the readings queued in RAM (profile rows are read
+    //again): only for a module that stays silent, not for a network outage.
+    if (modem_alive(1)) {
+        s_modemFailSince = 0;
+        TraceSerial.print("\r\n[MDM] Modem answers but the network is not ready, readings stay queued\r\n");
+        return false;
+    }
+    if (s_modemFailSince == 0) {
+        s_modemFailSince = millis() | 1;
+    } else if (millis() - s_modemFailSince > MODEM_RESTART_AFTER_MS) {
+        TraceSerial.print("\r\n[MDM] Modem silent for 2 h: restarting the ESP32\r\n");
+        delay(200);
+        ESP.restart();
+    }
+    TraceSerial.print("\r\n[MDM] Modem silent, readings stay queued\r\n");
+    return false;
 }
 
 // ── Network clock (AT+CCLK?) ────────────────────────────────────────────────
