@@ -18,9 +18,14 @@
 //  has a key, or when the device id is not the IMEI (the server derives the
 //  key from the IMEI).
 //
-//  A reading leaves the queue, and the trace leaves the ring buffer, only
-//  after every chunk got SEND OK. On failure the rest goes with the next
-//  cycle (same seq).
+//  After each reading the server's reply line is read:
+//    {"ok":true,...}            stored (or a duplicate): it leaves the queue
+//                               and its profile markers are saved
+//    {"ok":false,"seq":N,...}   refused: it leaves the queue, markers are
+//                               not saved, so its rows are read again
+//    no reply / framing error   upload failed, sent again next cycle
+//  The trace leaves the ring buffer after every chunk got SEND OK. On
+//  failure the rest goes with the next cycle (same seq).
 //
 //  The modem is shared with OTA: power-up, AT init and the TCP socket come
 //  from modem.ino. Modem traffic is printed on USB only (MODEM_DEBUG) and is
@@ -29,6 +34,7 @@
 #include <mbedtls/sha256.h>
 
 #define LB_CHUNK 1024
+#define LB_REPLY_TIMEOUT_MS 15000   // server reply to one READING
 
 static uint32_t g_lbSeq = 0;
 static uint32_t g_lbBoot = 0;
@@ -132,6 +138,59 @@ static bool lb_sendReading(const RdItem* item)
   return true;
 }
 
+//Server reply to a READING (tcp-server.js): 1 stored, 0 refused, -1 no
+//usable reply (timeout, connection closed, framing error, store failed).
+//Trace capture is off during the upload, so notes for the log go to `notes`.
+static int lb_readReply(const RdItem* item, String& notes)
+{
+  String line;
+  uint8_t buf[128];
+  bool closed = false;
+  uint32_t start = millis();
+  while (line.indexOf('\n') == -1)
+  {
+    if (millis() - start > LB_REPLY_TIMEOUT_MS || line.length() > 512)
+    {
+      notes += String("[DATA] Reading seq ") + item->seq + ": no reply from server\r\n";
+      return -1;
+    }
+    int n = modem_tcpRead(buf, sizeof(buf), closed);
+    if (n < 0)
+    {
+      return -1;
+    }
+    if (n == 0)
+    {
+      if (closed)
+      {
+        return -1;
+      }
+      delay(200);
+      continue;
+    }
+    for (int i = 0; i != n; ++i)
+    {
+      line += (char)buf[i];
+    }
+  }
+  line = line.substring(0, line.indexOf('\n'));
+  if (line.indexOf("\"ok\":true") != -1)
+  {
+    int k = line.indexOf("\"skipped\":");
+    if (k != -1)
+    {
+      notes += String("[DATA] Reading seq ") + item->seq + " stored, server skipped " +
+               line.substring(k + 10).toInt() + " profiles\r\n";
+    }
+    return 1;
+  }
+  notes += String("[DATA] Reading seq ") + item->seq + " refused: " + line + "\r\n";
+  //Without "seq" it is a framing error and the server closes the connection;
+  //store_failed is the server's own problem: send it again.
+  return line.indexOf("\"ok\":false") != -1 && line.indexOf("\"seq\":") != -1 &&
+         line.indexOf("store_failed") == -1 ? 0 : -1;
+}
+
 //Send the first total bytes of the trace. True on SEND OK for all of it.
 static bool lb_sendLog(size_t total, uint32_t dropped)
 {
@@ -181,6 +240,8 @@ void lb_upload()
   uint32_t dropped = TraceLog.dropped();
   uint32_t start = millis();
   unsigned readings = 0;
+  unsigned refused = 0;
+  String notes;
   TraceLog.setCapture(false);
   MODEM_DEBUG.printf("\r\n[DATA] Uploading %u readings + %u log bytes, seq %lu\r\n",
                      (unsigned)rd_waiting(), (unsigned)total, (unsigned long)g_lbSeq);
@@ -194,10 +255,17 @@ void lb_upload()
     for (RdItem* item = rd_peek(); ok && item != NULL; item = rd_peek())
     {
       ok = lb_sendReading(item);
-      if (ok)
+      int reply = ok ? lb_readReply(item, notes) : -1;
+      ok = reply >= 0;
+      if (reply == 1)
       {
         rd_pop(true);
         ++readings;
+      }
+      else if (reply == 0)
+      {
+        rd_reject();
+        ++refused;
       }
     }
     if (ok && total != 0)
@@ -219,7 +287,12 @@ void lb_upload()
   }
   TraceLog.setCapture(true);
   //Captured, so the server sees the result of the previous upload.
-  TraceSerial.printf("\r\n[DATA] Upload %s: %u readings, %u log bytes in %lu ms, %u readings waiting\r\n",
-                     ok ? "OK" : "failed", readings, ok ? (unsigned)total : 0U,
+  if (notes.length() != 0)
+  {
+    TraceSerial.print("\r\n");
+    TraceSerial.print(notes);
+  }
+  TraceSerial.printf("\r\n[DATA] Upload %s: %u readings, %u refused, %u log bytes in %lu ms, %u readings waiting\r\n",
+                     ok ? "OK" : "failed", readings, refused, ok ? (unsigned)total : 0U,
                      (unsigned long)(millis() - start), (unsigned)rd_waiting());
 }

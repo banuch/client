@@ -187,12 +187,16 @@ test('profiles exactly as the firmware formats them (reading_upload.ino rd_profi
   });
 });
 
-test('a bad profile rejects the whole reading', async () => {
+test('a bad profile is skipped, the reading and good profiles are stored', async () => {
   await withServer({}, async (s) => {
-    const body = JSON.stringify({ ...READING, profiles: [{ obis: '1.0.99.1.0.255', cols: [], rows: [{ t: 'now', c: [] }] }] });
+    const good = { obis: '1.0.99.2.0.255', name: 'Daily Load Profile', cols: [{ obis: '0.0.1.0.0.255', name: 'Clock' }],
+      rows: [{ t: '2026-10-23 00:00:00', c: ['2026-10-23 00:00:00'] }] };
+    const body = JSON.stringify({ ...READING, profiles: [{ obis: '1.0.99.1.0.255', cols: [], rows: [{ t: 'now', c: [] }] }, good] });
     const replies = await send(s.tcpPort, buildMessage({ type: 'READING', deviceId: IMEI, boot: 1, seq: 0, body, key: KEY }), 1);
-    assert.strictEqual(replies[0].ok, false);
-    assert.match(replies[0].error, /rows\[0\]\.t/);
+    assert.deepStrictEqual(replies[0], { ok: true, type: 'READING', seq: 0, skipped: 1 });
+    const list = await get(s, `/api/devices/${IMEI}/profiles`);
+    assert.deepStrictEqual(list.body.map((p) => p.obis), ['1.0.99.2.0.255']);
+    assert.strictEqual((await get(s, `/api/devices/${IMEI}/latest`)).body.valueCount, READING.values.length);
   });
 });
 

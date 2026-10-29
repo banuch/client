@@ -9,7 +9,7 @@
 //
 //  Read strategy. Avon meters ignore selective access by entry and send the
 //  whole buffer (see dlms_client/assoc_view.ino), so:
-//    - capture_period > 0 and column 1 is the clock (block load, daily
+//    - capture_period > 0 and a column is the clock (block load, daily
 //      load): selective access by date range, from the newest row already
 //      sent (marker) to now. Without a marker, and always on a full read,
 //      the last PG_WINDOW_PERIODS periods, at least PG_MIN_WINDOW_S. Never
@@ -40,6 +40,7 @@
 #define PG_MAX_NEW_ROWS     400UL             // ... and at most this many periods
 #define PG_PLAIN_MAX_ROWS   400
 #define PG_TABLE_MAX_COLS   16
+#define PG_UPLOAD_MAX_COLS  256               // dlms_server reading.js MAX_COLUMNS
 
 static const unsigned char CLOCK_LN[6] = {0, 0, 1, 0, 0, 255};
 
@@ -566,14 +567,55 @@ static int pg_rangeSelector(gxByteBuffer* bb, const PgColumn* clock,
 }
 
 //Read a uint attribute (capture period, entries). 0 if it can't be read.
+//Secure meters send the capture period as a big-endian octet-string
+//("03 84" = 900 s).
 static int pg_readUInt(const unsigned char* ln, unsigned char attr, uint32_t* out)
 {
   dlmsVARIANT value;
   var_init(&value);
   int ret = readAttribute(DLMS_OBJECT_TYPE_PROFILE_GENERIC, ln, attr, NULL, &value);
-  *out = ret == 0 && isNumeric(value.vt) ? (uint32_t)var_toInteger(&value) : 0;
+  *out = 0;
+  if (ret == 0 && isNumeric(value.vt))
+  {
+    *out = (uint32_t)var_toInteger(&value);
+  }
+  else if (ret == 0 && value.vt == DLMS_DATA_TYPE_OCTET_STRING && value.byteArr != NULL &&
+           value.byteArr->size >= 1 && value.byteArr->size <= 4)
+  {
+    for (uint32_t pos = 0; pos != value.byteArr->size; ++pos)
+    {
+      *out = (*out << 8) | value.byteArr->data[pos];
+    }
+  }
   var_clear(&value);
   return ret;
+}
+
+//Column that holds the row time, -1 if none: the clock (0.0.1.0.0.255,
+//not always column 1, e.g. Secure event logs), for billing first the
+//billing date (0.0.0.1.2.255, HPL 1.0.0.1.2.255).
+static int pg_timeColumn(const PgColumn* cols, uint16_t count, PgKind kind)
+{
+  static const unsigned char BILLING_DATE[2][6] = {{0, 0, 0, 1, 2, 255}, {1, 0, 0, 1, 2, 255}};
+  if (kind == PG_BILLING)
+  {
+    for (uint16_t c = 0; c != count; ++c)
+    {
+      if (cols[c].attr == 2 &&
+          (memcmp(cols[c].e.ln, BILLING_DATE[0], 6) == 0 || memcmp(cols[c].e.ln, BILLING_DATE[1], 6) == 0))
+      {
+        return c;
+      }
+    }
+  }
+  for (uint16_t c = 0; c != count; ++c)
+  {
+    if (cols[c].attr == 2 && memcmp(cols[c].e.ln, CLOCK_LN, 6) == 0)
+    {
+      return c;
+    }
+  }
+  return -1;
 }
 
 static PgKind pg_kind(const unsigned char* ln)
@@ -646,13 +688,14 @@ static void pg_tsText(uint32_t t, char* buff, size_t size)
            (unsigned)(s / 3600), (unsigned)(s / 60 % 60), (unsigned)(s % 60));
 }
 
-//Timestamp of a row: column 1 when it is a date-time. A clock column left
-//empty by the meter follows from the previous row plus the capture period.
-static bool pg_rowTime(const PgColumn* cols, uint16_t count, dlmsVARIANT* row, uint32_t period,
+//Timestamp of a row: column tc (pg_timeColumn) when it is a date-time. A clock
+//column left empty by the meter follows from the previous row plus the
+//capture period.
+static bool pg_rowTime(const PgColumn* cols, int tc, dlmsVARIANT* row, uint32_t period,
                        uint32_t* prevTs, bool* havePrev, uint32_t* ts)
 {
   dlmsVARIANT* v = NULL;
-  if (count == 0 || row->Arr->size == 0 || va_getByIndex(row->Arr, 0, &v) != 0)
+  if (tc < 0 || (uint16_t)tc >= row->Arr->size || va_getByIndex(row->Arr, tc, &v) != 0)
   {
     return false;
   }
@@ -662,7 +705,7 @@ static bool pg_rowTime(const PgColumn* cols, uint16_t count, dlmsVARIANT* row, u
     *havePrev = true;
     return true;
   }
-  if (cols[0].e.classId == DLMS_OBJECT_TYPE_CLOCK && *havePrev && period != 0)
+  if (cols[tc].e.classId == DLMS_OBJECT_TYPE_CLOCK && *havePrev && period != 0)
   {
     *prevTs += period;
     *ts = *prevTs;
@@ -672,15 +715,23 @@ static bool pg_rowTime(const PgColumn* cols, uint16_t count, dlmsVARIANT* row, u
 }
 
 //Queue the rows to upload (see the header) and advance the marker.
-//Returns the number of rows queued.
+//Returns the number of rows queued. A profile without rows to send is left
+//out of the reading.
 static uint16_t pg_collect(const AvEntry* p, PgKind kind, const PgColumn* cols, uint16_t count,
                            dlmsVARIANT* buffer, uint32_t period, uint32_t mark, uint32_t nowS)
 {
-  if (buffer->vt != DLMS_DATA_TYPE_ARRAY || buffer->Arr == NULL || count == 0)
+  if (buffer->vt != DLMS_DATA_TYPE_ARRAY || buffer->Arr == NULL || count == 0 || buffer->Arr->size == 0)
   {
     return 0;
   }
+  if (count > PG_UPLOAD_MAX_COLS)
+  {
+    TraceSerial.printf("  %u columns is too many to upload (limit %u)\r\n", (unsigned)count,
+                       (unsigned)PG_UPLOAD_MAX_COLS);
+    return 0;
+  }
   uint16_t rows = (uint16_t)buffer->Arr->size;
+  int tc = pg_timeColumn(cols, count, kind);
   uint32_t* times = (uint32_t*)malloc(sizeof(uint32_t) * (rows != 0 ? rows : 1));
   bool* hasTime = (bool*)malloc(sizeof(bool) * (rows != 0 ? rows : 1));
   if (times == NULL || hasTime == NULL)
@@ -701,7 +752,7 @@ static uint16_t pg_collect(const AvEntry* p, PgKind kind, const PgColumn* cols, 
     if (va_getByIndex(buffer->Arr, r, &row) == 0 && row->vt == DLMS_DATA_TYPE_STRUCTURE &&
         row->Arr != NULL)
     {
-      hasTime[r] = pg_rowTime(cols, count, row, period, &prevTs, &havePrev, &times[r]);
+      hasTime[r] = pg_rowTime(cols, tc, row, period, &prevTs, &havePrev, &times[r]);
       if (hasTime[r] && (newest < 0 || times[r] > times[newest]))
       {
         newest = r;
@@ -772,7 +823,7 @@ static uint16_t pg_collect(const AvEntry* p, PgKind kind, const PgColumn* cols, 
       }
       double number;
       const char* unit;
-      if (c == 0 && hasTime[r] && cols[0].e.classId == DLMS_OBJECT_TYPE_CLOCK)
+      if ((int)c == tc && hasTime[r] && cols[c].e.classId == DLMS_OBJECT_TYPE_CLOCK)
       {
         pg_tsText(times[r], cell, sizeof(cell));
         rd_profileCellText(cell);
@@ -794,7 +845,14 @@ static uint16_t pg_collect(const AvEntry* p, PgKind kind, const PgColumn* cols, 
     rd_profileRowEnd(id >= 0 ? eventName(id) : NULL);
     ++queued;
   }
-  rd_profileEnd();
+  if (queued != 0)
+  {
+    rd_profileEnd();
+  }
+  else
+  {
+    rd_profileCancel();
+  }
   if (pg_hasMarker(kind) && newMark != mark)
   {
     char key[16];
@@ -869,8 +927,9 @@ static int pg_readProfile(const AvEntry* p, PgKind kind, const unsigned char* no
   }
   gxByteBuffer access;
   BYTE_BUFFER_INIT(&access);
-  bool byRange = period != 0 && count != 0 &&
-                 cols[0].e.classId == DLMS_OBJECT_TYPE_CLOCK && haveNow;
+  int tc = pg_timeColumn(cols, count, kind);
+  bool byRange = period != 0 && tc >= 0 &&
+                 cols[tc].e.classId == DLMS_OBJECT_TYPE_CLOCK && haveNow;
   if (byRange)
   {
     unsigned char start[12], end[12];
@@ -904,7 +963,7 @@ static int pg_readProfile(const AvEntry* p, PgKind kind, const unsigned char* no
       dtText(end, to, sizeof(to));
       TraceSerial.printf("  Reading range %s .. %s\r\n", from, to);
     }
-    ret = pg_rangeSelector(&access, &cols[0], start, end);
+    ret = pg_rangeSelector(&access, &cols[tc], start, end);
   }
   else if (inUse > PG_PLAIN_MAX_ROWS)
   {

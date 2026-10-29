@@ -18,67 +18,80 @@
 //
 //  t is the row's timestamp in meter local time (or null), c one cell per
 //  column (number, string or null), e the event name of event log rows.
+//
+//  A profile that fails the checks is left out (listed in `skipped`); the
+//  values and the other profiles are still stored.
 // =============================================================================
 
 const OBIS = /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/;
 const ROW_TIME = /^\d{4}-\d\d-\d\d \d\d:\d\d:\d\d$/;
 const MAX_VALUES = 2000;
 const MAX_PROFILES = 50;
-const MAX_COLUMNS = 128;
+const MAX_COLUMNS = 256;   // Secure HT billing profiles have 188
 const MAX_ROWS = 5000;
 
 function shortString(v, max) {
   return typeof v === 'string' && v.length <= max;
 }
 
-/** Check the optional profiles array. Returns an error string or the parsed list. */
-function parseProfiles(list) {
-  if (list === undefined) return [];
-  if (!Array.isArray(list) || list.length > MAX_PROFILES) return `profiles must be an array of at most ${MAX_PROFILES}`;
-  const out = [];
-  for (const [i, p] of list.entries()) {
-    const at = `profiles[${i}]`;
-    if (!p || typeof p !== 'object' || !shortString(p.obis, 23) || !OBIS.test(p.obis)) {
-      return `${at}.obis must be an OBIS code a.b.c.d.e.f`;
-    }
-    const name = p.name === undefined ? '' : p.name;
-    if (!shortString(name, 64)) return `${at}.name must be a string of at most 64`;
-    if (!Array.isArray(p.cols) || p.cols.length > MAX_COLUMNS) return `${at}.cols must be an array of at most ${MAX_COLUMNS}`;
-    const cols = [];
-    for (const [j, c] of p.cols.entries()) {
-      if (!c || typeof c !== 'object' || !shortString(c.obis, 23) || !OBIS.test(c.obis)) {
-        return `${at}.cols[${j}].obis must be an OBIS code a.b.c.d.e.f`;
-      }
-      const cname = c.name === undefined ? '' : c.name;
-      const unit = c.u === undefined ? '' : c.u;
-      if (!shortString(cname, 64)) return `${at}.cols[${j}].name must be a string of at most 64`;
-      if (!shortString(unit, 16)) return `${at}.cols[${j}].u must be a string of at most 16`;
-      cols.push({ obis: c.obis, name: cname, unit });
-    }
-    if (!Array.isArray(p.rows) || p.rows.length > MAX_ROWS) return `${at}.rows must be an array of at most ${MAX_ROWS}`;
-    const rows = [];
-    for (const [j, r] of p.rows.entries()) {
-      const rat = `${at}.rows[${j}]`;
-      if (!r || typeof r !== 'object' || Array.isArray(r)) return `${rat} must be an object`;
-      const t = r.t === undefined ? null : r.t;
-      if (t !== null && !(typeof t === 'string' && ROW_TIME.test(t))) return `${rat}.t must be "YYYY-MM-DD hh:mm:ss" or null`;
-      if (!Array.isArray(r.c) || r.c.length > cols.length) return `${rat}.c must be an array of at most one cell per column`;
-      for (const [k, cell] of r.c.entries()) {
-        const ok = cell === null || (typeof cell === 'number' && Number.isFinite(cell)) || shortString(cell, 256);
-        if (!ok) return `${rat}.c[${k}] must be a number, a string of at most 256 or null`;
-      }
-      const e = r.e === undefined ? null : r.e;
-      if (e !== null && !shortString(e, 64)) return `${rat}.e must be a string of at most 64`;
-      rows.push({ t, c: r.c, e });
-    }
-    out.push({ obis: p.obis, name, cols, rows });
+/** Check one profile. Returns an error string or the parsed profile. */
+function parseProfile(p, at) {
+  if (!p || typeof p !== 'object' || !shortString(p.obis, 23) || !OBIS.test(p.obis)) {
+    return `${at}.obis must be an OBIS code a.b.c.d.e.f`;
   }
-  return out;
+  const name = p.name === undefined ? '' : p.name;
+  if (!shortString(name, 64)) return `${at}.name must be a string of at most 64`;
+  if (!Array.isArray(p.cols) || p.cols.length > MAX_COLUMNS) return `${at}.cols must be an array of at most ${MAX_COLUMNS}`;
+  const cols = [];
+  for (const [j, c] of p.cols.entries()) {
+    if (!c || typeof c !== 'object' || !shortString(c.obis, 23) || !OBIS.test(c.obis)) {
+      return `${at}.cols[${j}].obis must be an OBIS code a.b.c.d.e.f`;
+    }
+    const cname = c.name === undefined ? '' : c.name;
+    const unit = c.u === undefined ? '' : c.u;
+    if (!shortString(cname, 64)) return `${at}.cols[${j}].name must be a string of at most 64`;
+    if (!shortString(unit, 16)) return `${at}.cols[${j}].u must be a string of at most 16`;
+    cols.push({ obis: c.obis, name: cname, unit });
+  }
+  if (!Array.isArray(p.rows) || p.rows.length > MAX_ROWS) return `${at}.rows must be an array of at most ${MAX_ROWS}`;
+  const rows = [];
+  for (const [j, r] of p.rows.entries()) {
+    const rat = `${at}.rows[${j}]`;
+    if (!r || typeof r !== 'object' || Array.isArray(r)) return `${rat} must be an object`;
+    const t = r.t === undefined ? null : r.t;
+    if (t !== null && !(typeof t === 'string' && ROW_TIME.test(t))) return `${rat}.t must be "YYYY-MM-DD hh:mm:ss" or null`;
+    if (!Array.isArray(r.c) || r.c.length > cols.length) return `${rat}.c must be an array of at most one cell per column`;
+    for (const [k, cell] of r.c.entries()) {
+      const ok = cell === null || (typeof cell === 'number' && Number.isFinite(cell)) || shortString(cell, 256);
+      if (!ok) return `${rat}.c[${k}] must be a number, a string of at most 256 or null`;
+    }
+    const e = r.e === undefined ? null : r.e;
+    if (e !== null && !shortString(e, 64)) return `${rat}.e must be a string of at most 64`;
+    rows.push({ t, c: r.c, e });
+  }
+  return { obis: p.obis, name, cols, rows };
+}
+
+/**
+ * Check the optional profiles array. Returns an error string, or
+ * {profiles, skipped} where skipped lists the profiles left out and why.
+ */
+function parseProfiles(list) {
+  if (list === undefined) return { profiles: [], skipped: [] };
+  if (!Array.isArray(list) || list.length > MAX_PROFILES) return `profiles must be an array of at most ${MAX_PROFILES}`;
+  const profiles = [];
+  const skipped = [];
+  for (const [i, p] of list.entries()) {
+    const r = parseProfile(p, `profiles[${i}]`);
+    if (typeof r === 'string') skipped.push({ obis: p && typeof p.obis === 'string' ? p.obis.slice(0, 23) : null, error: r });
+    else profiles.push(r);
+  }
+  return { profiles, skipped };
 }
 
 /**
  * Parse and check a READING body.
- * @returns {{ok:true, reading:{ret:number, values:Array, profiles:Array}} | {ok:false, error:string}}
+ * @returns {{ok:true, reading:{ret:number, values:Array, profiles:Array, skipped:Array}} | {ok:false, error:string}}
  */
 function parseReading(body) {
   let r;
@@ -111,9 +124,9 @@ function parseReading(body) {
       return { ok: false, error: `values[${i}] needs v or s` };
     }
   }
-  const profiles = parseProfiles(r.profiles);
-  if (typeof profiles === 'string') return { ok: false, error: profiles };
-  return { ok: true, reading: { ret: r.ret, values, profiles } };
+  const parsed = parseProfiles(r.profiles);
+  if (typeof parsed === 'string') return { ok: false, error: parsed };
+  return { ok: true, reading: { ret: r.ret, values, profiles: parsed.profiles, skipped: parsed.skipped } };
 }
 
 module.exports = { parseReading };

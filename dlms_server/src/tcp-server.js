@@ -7,11 +7,12 @@
 //
 //    {"ok":true,"type":"READING","seq":N}            stored
 //    {"ok":true,"type":"READING","seq":N,"dup":true} already stored before
+//    {"ok":true,"type":"READING","seq":N,"skipped":K} stored without K bad profiles
 //    {"ok":false,"seq":N,"error":"bad_signature"}    rejected, connection stays open
 //    {"ok":false,"error":"<framing error>"}          then the connection is closed
 //
-//  The firmware does not wait for replies (it trusts the modem's SEND OK);
-//  they are there for test tools and later firmware.
+//  FW 2.0.7+ waits for the reply to each READING before it forgets it and
+//  saves its profile markers; LOG replies are not read.
 // =============================================================================
 const net = require('net');
 const { FrameParser } = require('./framing');
@@ -44,7 +45,8 @@ function createTcpServer(cfg, { db, logs, log = console.log }) {
         return { ok: false, seq: header.seq, error: parsed.error };
       }
       const age = Math.min(header.ageS, MAX_AGE_S);
-      const { profiles } = parsed.reading;
+      const { profiles, skipped } = parsed.reading;
+      for (const k of skipped) log(`[TCP] READING ${header.deviceId} seq=${header.seq} profile ${k.obis} skipped: ${k.error}`);
       const { stored, newRows } = db.saveReading({
         ...base, fw: header.fw, readAt: now - age * 1000, ret: parsed.reading.ret, values: parsed.reading.values,
         profiles,
@@ -53,7 +55,10 @@ function createTcpServer(cfg, { db, logs, log = console.log }) {
       const prof = profiles.length ? ` ${profiles.length} profiles ${rowCount} rows (${newRows} new)` : '';
       log(`[TCP] READING ${header.deviceId} seq=${header.seq} ${parsed.reading.values.length} values${prof}` +
         ` ret=${parsed.reading.ret} age=${age}s${stored ? '' : ' duplicate'}${tag}`);
-      return stored ? { ok: true, type: 'READING', seq: header.seq } : { ok: true, type: 'READING', seq: header.seq, dup: true };
+      const res = { ok: true, type: 'READING', seq: header.seq };
+      if (!stored) res.dup = true;
+      if (skipped.length) res.skipped = skipped.length;
+      return res;
     }
 
     // LOG
