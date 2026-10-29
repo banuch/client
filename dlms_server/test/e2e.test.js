@@ -187,6 +187,56 @@ test('profiles exactly as the firmware formats them (reading_upload.ino rd_profi
   });
 });
 
+const BILLING_COLS = [{ obis: '0.0.0.1.2.255', name: 'Billing Date' }, { obis: '1.0.1.8.0.255', name: 'Active Energy Import', u: 'kWh' }];
+/** A reading whose billing profile has a closed month and the open month at the meter clock `now`. */
+const billingReading = (now, kwh, closed = '2026-10-01 00:00:00') => JSON.stringify({
+  ret: 0,
+  values: [{ obis: '0.0.1.0.0.255', name: 'Clock', s: now }],
+  profiles: [{ obis: '1.0.98.1.0.255', name: 'Billing Profile', cols: BILLING_COLS,
+    rows: [{ t: closed, c: [closed, 23415.63] }, { t: now, c: [now, kwh] }] }],
+});
+
+test('the open billing row is replaced, not added again every cycle', async () => {
+  await withServer({}, async (s) => {
+    const msgs = [['2026-10-29 16:00:22', 23545.4], ['2026-10-29 16:30:21', 23545.7], ['2026-10-29 17:00:22', 23546.0]]
+      .map(([now, kwh], seq) => buildMessage({ type: 'READING', deviceId: IMEI, boot: 3, seq, body: billingReading(now, kwh), key: KEY }));
+    await send(s.tcpPort, Buffer.concat(msgs), 3);
+    let p = await get(s, `/api/devices/${IMEI}/profiles/1.0.98.1.0.255`);
+    assert.deepStrictEqual(p.body.rows.map((r) => [r.t, r.c[1]]),
+      [['2026-10-29 17:00:22', 23546.0], ['2026-10-01 00:00:00', 23415.63]]);
+    // The month closes: its row arrives with its real billing date and is kept.
+    await send(s.tcpPort, buildMessage({ type: 'READING', deviceId: IMEI, boot: 3, seq: 3,
+      body: billingReading('2026-11-01 00:30:00', 23600, '2026-11-01 00:00:00'), key: KEY }), 1);
+    p = await get(s, `/api/devices/${IMEI}/profiles/1.0.98.1.0.255`);
+    assert.deepStrictEqual(p.body.rows.map((r) => r.t), ['2026-11-01 00:30:00', '2026-11-01 00:00:00', '2026-10-01 00:00:00']);
+  });
+});
+
+test('migration 1 folds the stored copies of the open billing row into one', async () => {
+  await withServer({}, async (s) => {
+    await send(s.tcpPort, buildMessage({ type: 'READING', deviceId: IMEI, boot: 4, seq: 0,
+      body: billingReading('2026-10-29 16:00:22', 23545.4), key: KEY }), 1);
+    const { openDb } = require('../src/db');
+    let db = openDb(s.cfg.dbFile);
+    // Rebuild what older servers stored: every open row under its own time.
+    db.db.prepare("UPDATE profile_rows SET row_key = 't:' || t WHERE row_key = 'open'").run();
+    db.db.prepare(`INSERT INTO profile_rows (device_id, obis, t, cells, event, row_key, reading_id, received_at, verified)
+      SELECT device_id, obis, '2026-10-29 15:30:21', cells, event, 't:2026-10-29 15:30:21', reading_id, received_at, verified
+      FROM profile_rows WHERE t = '2026-10-29 16:00:22'`).run();
+    db.db.pragma('user_version = 0');
+    db.close();
+    db = openDb(s.cfg.dbFile);
+    const rows = db.profileRows({ deviceId: IMEI, obis: '1.0.98.1.0.255', limit: 10 }).rows;
+    db.close();
+    assert.deepStrictEqual(rows.map((r) => r.t), ['2026-10-29 16:00:22', '2026-10-01 00:00:00']);
+    // The kept copy is the "open" row: the next cycle replaces it.
+    await send(s.tcpPort, buildMessage({ type: 'READING', deviceId: IMEI, boot: 4, seq: 1,
+      body: billingReading('2026-10-29 16:30:21', 23545.7), key: KEY }), 1);
+    const p = await get(s, `/api/devices/${IMEI}/profiles/1.0.98.1.0.255`);
+    assert.deepStrictEqual(p.body.rows.map((r) => r.t), ['2026-10-29 16:30:21', '2026-10-01 00:00:00']);
+  });
+});
+
 test('a bad profile is skipped, the reading and good profiles are stored', async () => {
   await withServer({}, async (s) => {
     const good = { obis: '1.0.99.2.0.255', name: 'Daily Load Profile', cols: [{ obis: '0.0.1.0.0.255', name: 'Clock' }],

@@ -12,6 +12,13 @@
 //  (several may share a second) and rows without a time (name plate) are
 //  keyed by a hash of time and cells. The columns of each profile are kept
 //  in profile_columns (latest wins).
+//
+//  Billing profile: the open month's row carries the meter's current time as
+//  its billing date, so its time changes every cycle. The newest billing row
+//  of a reading, when its time is within OPEN_ROW_S of the meter clock in
+//  the same reading, is that open row: it is keyed "open" and replaced in
+//  place. When the month closes the meter sends it with its real billing
+//  date, which is stored as a normal row.
 // =============================================================================
 const crypto = require('crypto');
 const Database = require('better-sqlite3');
@@ -87,9 +94,61 @@ CREATE UNIQUE INDEX IF NOT EXISTS profile_rows_dedupe ON profile_rows(device_id,
 CREATE INDEX IF NOT EXISTS profile_rows_time ON profile_rows(device_id, obis, t);
 `;
 
+const BILLING_OBIS = '1.0.98.1.0.255';
+const CLOCK_OBIS = '0.0.1.0.0.255';
+const OPEN_ROW_S = 3600;
+const OPEN_ROW_KEY = 'open';
+
+/** Meter local "YYYY-MM-DD hh:mm[:ss]" -> ms on a UTC scale (only differences matter), NaN if not a time. */
+function localMs(s) {
+  const m = /^(\d{4})-(\d\d)-(\d\d) (\d\d):(\d\d)(?::(\d\d|\*\*))?/.exec(String(s || ''));
+  if (!m) return NaN;
+  const sec = m[6] && m[6] !== '**' ? Number(m[6]) : 0;
+  return Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]), Number(m[4]), Number(m[5]), sec);
+}
+
+const isOpenTime = (t, clock) => Math.abs(localMs(t) - localMs(clock)) <= OPEN_ROW_S * 1000;
+
+/** The open month's row of a billing profile in one reading (see the header), or null. */
+function openBillingRow(p, clock) {
+  if (p.obis !== BILLING_OBIS || !clock) return null;
+  let newest = null;
+  for (const r of p.rows) if (r.t && (!newest || r.t > newest.t)) newest = r;
+  return newest && isOpenTime(newest.t, clock) ? newest : null;
+}
+
 function rowKey(row) {
   if (row.t && !row.e) return `t:${row.t}`;
   return 'h:' + crypto.createHash('sha256').update(`${row.t ?? ''}\n${JSON.stringify(row.c)}`).digest('hex').slice(0, 32);
+}
+
+/**
+ * One-time data fixes, tracked in PRAGMA user_version.
+ *   1: before the "open" key every cycle stored the open billing row again
+ *      under its changing time. Of those copies (time within OPEN_ROW_S of the
+ *      meter clock of the reading that stored them) the newest per device
+ *      becomes the "open" row, the rest are deleted.
+ */
+function migrate(db) {
+  if (db.pragma('user_version', { simple: true }) >= 1) return;
+  const rows = db.prepare(`
+    SELECT r.id, r.device_id AS deviceId, r.t, v.text AS clock
+    FROM profile_rows r JOIN reading_values v ON v.reading_id = r.reading_id AND v.obis = ?
+    WHERE r.obis = ? AND r.row_key LIKE 't:%'
+    ORDER BY r.device_id, r.t DESC`).all(CLOCK_OBIS, BILLING_OBIS);
+  const hasOpen = db.prepare('SELECT 1 FROM profile_rows WHERE device_id = ? AND obis = ? AND row_key = ?');
+  const toOpen = db.prepare('UPDATE profile_rows SET row_key = ? WHERE id = ?');
+  const del = db.prepare('DELETE FROM profile_rows WHERE id = ?');
+  db.transaction(() => {
+    const kept = new Set();
+    for (const r of rows) {
+      if (!isOpenTime(r.t, r.clock)) continue;
+      if (!kept.has(r.deviceId) && !hasOpen.get(r.deviceId, BILLING_OBIS, OPEN_ROW_KEY)) toOpen.run(OPEN_ROW_KEY, r.id);
+      else del.run(r.id);
+      kept.add(r.deviceId);
+    }
+    db.pragma('user_version = 1');
+  })();
 }
 
 function openDb(file) {
@@ -97,6 +156,7 @@ function openDb(file) {
   db.pragma('journal_mode = WAL');
   db.pragma('foreign_keys = ON');
   db.exec(SCHEMA);
+  migrate(db);
 
   const q = {
     touchDevice: db.prepare(`
@@ -127,9 +187,9 @@ function openDb(file) {
     upsertProfileRow: db.prepare(`
       INSERT INTO profile_rows (device_id, obis, t, cells, event, row_key, reading_id, received_at, verified)
       VALUES (@deviceId, @obis, @t, @cells, @event, @rowKey, @readingId, @receivedAt, @verified)
-      ON CONFLICT(device_id, obis, row_key) DO UPDATE SET cells = @cells, event = @event,
+      ON CONFLICT(device_id, obis, row_key) DO UPDATE SET t = @t, cells = @cells, event = @event,
         reading_id = @readingId, received_at = @receivedAt, verified = @verified
-      WHERE cells != @cells`),
+      WHERE cells != @cells OR t IS NOT @t`),
   };
 
   /**
@@ -146,10 +206,12 @@ function openDb(file) {
     for (const v of m.values) q.insertValue.run({ readingId: lastInsertRowid, ...v });
     q.setLastReading.run({ id: lastInsertRowid, deviceId: m.deviceId, readAt: m.readAt });
     let newRows = 0;
+    const clock = m.values.find((v) => v.obis === CLOCK_OBIS)?.text;
     for (const p of m.profiles || []) {
       q.upsertColumns.run({ deviceId: m.deviceId, obis: p.obis, name: p.name, cols: JSON.stringify(p.cols), now: m.receivedAt });
+      const open = openBillingRow(p, clock);
       for (const r of p.rows) {
-        const key = rowKey(r);
+        const key = r === open ? OPEN_ROW_KEY : rowKey(r);
         if (!q.profileRowExists.get(m.deviceId, p.obis, key)) newRows++;
         q.upsertProfileRow.run({
           deviceId: m.deviceId, obis: p.obis, t: r.t, cells: JSON.stringify(r.c), event: r.e,
