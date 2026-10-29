@@ -16,7 +16,8 @@
 //  (scaled, same units as the values), strings or null; t is the row's
 //  timestamp (meter local time) or null, e the event name of event log rows.
 //
-//  Bodies wait in PSRAM until log_bridge.ino has sent them (SEND OK). At most
+//  Bodies wait in PSRAM until log_bridge.ino has sent them and the server
+//  replied (rd_pop, or rd_reject when it refused one). At most
 //  RD_QUEUE_MAX cycles are kept; when it is full the oldest is dropped.
 //
 //  Profile markers ("newest row sent", see profiles.ino) ride along with the
@@ -419,7 +420,7 @@ RdItem* rd_peek()
   return g_rdCount != 0 ? &g_rdQueue[g_rdHead] : NULL;
 }
 
-//Remove the oldest reading. sent = it got SEND OK: save its markers.
+//Remove the oldest reading. sent = the server stored it: save its markers.
 void rd_pop(bool sent)
 {
   if (g_rdCount == 0)
@@ -434,6 +435,18 @@ void rd_pop(bool sent)
   g_rdQueue[g_rdHead].body = NULL;
   g_rdHead = (g_rdHead + 1) % RD_QUEUE_MAX;
   --g_rdCount;
+}
+
+//The server refused the oldest reading: forget it without saving its
+//markers, and roll the RAM copy back to NVS so its rows are read again.
+void rd_reject()
+{
+  rd_pop(false);
+  for (uint8_t i = 0; i != g_rdCount; ++i)
+  {
+    g_rdQueue[(g_rdHead + i) % RD_QUEUE_MAX].markCount = 0;
+  }
+  g_mkRamCount = 0;
 }
 
 uint8_t rd_waiting()

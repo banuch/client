@@ -133,15 +133,27 @@ test('reading: profiles', () => {
   assert.strictEqual(ev.reading.profiles[0].rows[0].e, 'Over voltage - Occ');
 });
 
-test('reading: bad profiles', () => {
-  const bad = (p) => parseReading(Buffer.from(JSON.stringify({ ret: 0, values: [], profiles: p })));
-  assert.match(bad({}).error, /profiles must be an array/);
-  assert.match(bad([{ ...PROFILE, obis: 'x' }]).error, /profiles\[0\]\.obis/);
-  assert.match(bad([{ ...PROFILE, cols: [{ obis: '1.2' }] }]).error, /cols\[0\]\.obis/);
-  assert.match(bad([{ ...PROFILE, rows: [{ t: '23-10-2026', c: [] }] }]).error, /rows\[0\]\.t/);
-  assert.match(bad([{ ...PROFILE, rows: [{ t: null, c: [1, 2, 3] }] }]).error, /one cell per column/);
-  assert.match(bad([{ ...PROFILE, rows: [{ t: null, c: [{}] }] }]).error, /c\[0\] must be/);
-  assert.match(bad([{ ...PROFILE, rows: [{ t: null, c: [], e: 5 }] }]).error, /\.e must be/);
+test('reading: bad profiles are skipped, the rest is kept', () => {
+  const parse = (p) => parseReading(Buffer.from(JSON.stringify({ ret: 0, values: [{ obis: '1.0.1.8.0.255', v: 1 }], profiles: p })));
+  assert.match(parse({}).error, /profiles must be an array/);
+  const skipped = (p) => {
+    const r = parse([p, PROFILE]);
+    assert.ok(r.ok, r.error);
+    assert.strictEqual(r.reading.values.length, 1);
+    assert.deepStrictEqual(r.reading.profiles.map((x) => x.obis), [PROFILE.obis]);
+    assert.strictEqual(r.reading.skipped.length, 1);
+    return r.reading.skipped[0].error;
+  };
+  assert.match(skipped({ ...PROFILE, obis: 'x' }), /profiles\[0\]\.obis/);
+  assert.match(skipped({ ...PROFILE, cols: [{ obis: '1.2' }] }), /cols\[0\]\.obis/);
+  assert.match(skipped({ ...PROFILE, rows: [{ t: '23-10-2026', c: [] }] }), /rows\[0\]\.t/);
+  assert.match(skipped({ ...PROFILE, rows: [{ t: null, c: [1, 2, 3] }] }), /one cell per column/);
+  assert.match(skipped({ ...PROFILE, rows: [{ t: null, c: [{}] }] }), /c\[0\] must be/);
+  assert.match(skipped({ ...PROFILE, rows: [{ t: null, c: [], e: 5 }] }), /\.e must be/);
+  assert.match(skipped({ ...PROFILE, cols: Array(257).fill(PROFILE.cols[1]), rows: [] }), /at most 256/);
+  // 188 columns (Secure HT billing profile) are fine.
+  const wide = parse([{ ...PROFILE, cols: Array(188).fill(PROFILE.cols[1]), rows: [] }]);
+  assert.strictEqual(wide.reading.profiles[0].cols.length, 188);
 });
 
 test('reading: bad bodies', () => {

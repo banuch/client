@@ -14,7 +14,7 @@
 #include "trace_tee.h"
 
 // ── Firmware identity ───────────────────────────────────────────────────────
-#define FW_VERSION "2.0.6" // MAJOR.MINOR.PATCH -- bump before each release
+#define FW_VERSION "2.0.7" // MAJOR.MINOR.PATCH -- bump before each release
 
 // ── Debug output ────────────────────────────────────────────────────────────
 // OTA results go through the trace tee, so they also reach the data server.
