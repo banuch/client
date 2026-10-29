@@ -38,6 +38,7 @@
 #define PG_WINDOW_PERIODS   7                 // daily load: last 7 days
 #define PG_MAX_BACK_S       (7UL * 86400UL)   // longest catch-up after an outage
 #define PG_MAX_NEW_ROWS     400UL             // ... and at most this many periods
+#define PG_RECOVER_BACK_S   (45UL * 86400UL)  // after a marker epoch reset (daily load keeps 45 days)
 #define PG_PLAIN_MAX_ROWS   400
 #define PG_TABLE_MAX_COLS   16
 #define PG_UPLOAD_MAX_COLS  256               // dlms_server reading.js MAX_COLUMNS
@@ -945,6 +946,17 @@ static int pg_readProfile(const AvEntry* p, PgKind kind, const unsigned char* no
     }
     //From the newest row sent; a full read also shows the usual window.
     uint32_t fromS = mark != 0 ? mark + 1 : nowS - window;
+    //After a one-time marker reset (mk_checkEpoch) an unmarked profile
+    //reads back PG_RECOVER_BACK_S, still at most PG_MAX_NEW_ROWS periods.
+    if (mark == 0 && pg_hasMarker(kind) && mk_recovering())
+    {
+      maxBack = period * PG_MAX_NEW_ROWS;
+      if (maxBack > PG_RECOVER_BACK_S || maxBack / PG_MAX_NEW_ROWS != period)
+      {
+        maxBack = PG_RECOVER_BACK_S;
+      }
+      fromS = nowS - maxBack;
+    }
     if (full && fromS > nowS - window)
     {
       fromS = nowS - window;
