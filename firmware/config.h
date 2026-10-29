@@ -66,7 +66,7 @@
 // the port after repeated wrong passwords); METER_PW DETECT or a BLE "read
 // now" searches at once.
 //#define METER_PASSWORDS_DEFAULT {"1111111111111111"}
-#define METER_PASSWORDS_DEFAULT {"1111111111111111", "Hello", "lnt","1A2B3C4D"}
+#define METER_PASSWORDS_DEFAULT {"1111111111111111", "Hello", "lnt1","1A2B3C4D","ABCD0001","lnt"}
 #define MPW_MAX 8
 #define MPW_LEN_MAX 16
 #define MPW_SEARCH_GAP_S (6UL * 3600UL)
