@@ -30,6 +30,11 @@
 
 #define RD_QUEUE_MAX 48       // 12 h at the 15-minute read interval
 #define PG_MARK_NVS "pgmark"  // NVS namespace of the profile markers
+#define PG_EPOCH_NVS "pgmarkv"  // marker epoch (its own namespace: RESET_MARKS clears "pgmark")
+//Raise to make every device forget its block / daily load markers once, on
+//the first boot of the new firmware (field devices cannot get RESET_MARKS).
+//1 (FW 2.0.8): rows refused by servers before 2.0.7 were marked as sent.
+#define PG_MARK_EPOCH 1
 
 // RdItem (one queued body) is declared in config.h.
 static RdItem g_rdQueue[RD_QUEUE_MAX];
@@ -52,6 +57,7 @@ static PgMark g_rdCycleMarks[PG_MARK_MAX];   // markers advanced this cycle
 static uint8_t g_rdCycleMarkCount = 0;
 static PgMark g_mkRam[PG_MARK_MAX];          // RAM copy, loaded from NVS on use
 static uint8_t g_mkRamCount = 0;
+static bool g_mkRecover = false;             // markers reset by mk_checkEpoch() this boot
 
 //Append a JSON string literal (with quotes).
 static void rd_jsonStr(String& out, const char* str)
@@ -356,6 +362,50 @@ void mk_resetAll()
   {
     g_rdQueue[(g_rdHead + i) % RD_QUEUE_MAX].markCount = 0;
   }
+}
+
+//Called once from setup(). When the saved epoch is older than PG_MARK_EPOCH,
+//forget the block and daily load markers (as RESET_MARKS would, but only
+//for those two) so their rows still in the meter are read and sent again.
+//The server drops rows it already has.
+void mk_checkEpoch()
+{
+  Preferences p;
+  uint32_t epoch = 0;
+  if (p.begin(PG_EPOCH_NVS, true))
+  {
+    epoch = p.getUInt("epoch", 0);
+    p.end();
+  }
+  if (epoch >= PG_MARK_EPOCH)
+  {
+    return;
+  }
+  static const char* KEYS[] = {"m1_0_99_1_0", "m1_0_99_2_0"};   // pg_markKey of 1.0.99.1/2.0.255
+  if (p.begin(PG_MARK_NVS, false))
+  {
+    for (size_t i = 0; i != sizeof(KEYS) / sizeof(KEYS[0]); ++i)
+    {
+      p.remove(KEYS[i]);
+    }
+    p.end();
+  }
+  g_mkRamCount = 0;
+  if (p.begin(PG_EPOCH_NVS, false))
+  {
+    p.putUInt("epoch", PG_MARK_EPOCH);
+    p.end();
+  }
+  g_mkRecover = true;
+  TraceSerial.printf("\r\n[DATA] Marker epoch %lu -> %u: block and daily load history is sent again\r\n",
+                     (unsigned long)epoch, (unsigned)PG_MARK_EPOCH);
+}
+
+//True after mk_checkEpoch() reset the markers this boot: an unmarked
+//profile then reads its whole catch-up range instead of the usual window.
+bool mk_recovering()
+{
+  return g_mkRecover;
 }
 
 //End of a read cycle: queue the body. A failed cycle is queued too, so the

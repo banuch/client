@@ -1703,6 +1703,7 @@ void setup() {
     ota_reportBootResult();
   }
   lb_begin();
+  mk_checkEpoch();
   //First OTA check after the boot read and its log upload.
   g_ota.nextCheckMs = millis() + BOOT_CHECK_DELAY_MS;
   TraceSerial.print("Type HELP for OTA commands.\r\n");
