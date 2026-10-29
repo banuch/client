@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="robots" content="noindex">
+  <title>AMR Data · Sign in</title>
+  <link rel="stylesheet" href="css/app.css">
+  <link rel="stylesheet" href="css/login.css">
+</head>
+<body class="login-page">
+  <div class="login-bg" aria-hidden="true"></div>
+
+  <!-- Modal sign-in dialog; it cannot be dismissed, the dashboard needs a session. -->
+  <dialog class="login" id="dlg" aria-labelledby="title" aria-describedby="subtitle">
+    <div class="login-head">
+      <div class="login-logo" aria-hidden="true">
+        <svg viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
+      </div>
+      <h1 id="title">AMR Data</h1>
+      <p id="subtitle">Sign in to view meter readings and device logs.</p>
+    </div>
+    <form id="form" class="login-form" autocomplete="on" novalidate>
+      <div id="err" class="alert hidden" role="alert" aria-live="assertive"></div>
+      <label class="field">Username
+        <input name="username" autocomplete="username" autocapitalize="none" spellcheck="false" required autofocus>
+      </label>
+      <label class="field">Password
+        <span class="pw">
+          <input name="password" id="password" type="password" autocomplete="current-password" required>
+          <button type="button" class="toggle" id="toggle" aria-controls="password" aria-pressed="false">Show</button>
+        </span>
+        <span id="caps" class="caps hidden">Caps Lock is on</span>
+      </label>
+      <button class="primary" id="btn" type="submit">Sign in</button>
+      <p class="login-note">The login is VIEW_USER / VIEW_PASSWORD in the server's .env file.</p>
+    </form>
+  </dialog>
+
+  <div class="login-foot">AMR · meter readings and device logs</div>
+
+  <script src="js/login.js"></script>
+</body>
+</html>

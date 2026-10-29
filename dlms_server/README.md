@@ -44,7 +44,10 @@ node tools/check-receive.js --host 65.20.77.137 --pass <VIEW_PASSWORD> --secret 
 | `--device` | `TEST-CHECK` (shows up as a device on the page) |
 | `--no-api` | only check the TCP side (when port 7002 is not reachable) |
 
-Open `http://<host>:7002/` and log in with `VIEW_USER` / `VIEW_PASSWORD`.
+Open `http://<host>:7002/` and sign in with `VIEW_USER` / `VIEW_PASSWORD` on the
+sign-in page; **Log out** is in the top bar. Sessions end after `SESSION_IDLE_SEC`
+(12 h) without use, after `SESSION_MAX_SEC` (7 days), or when the server restarts.
+Scripts can send the same login as HTTP Basic (`curl -u admin:<VIEW_PASSWORD>`).
 Without `VIEW_PASSWORD` the page has no login and only listens on 127.0.0.1.
 For HTTPS, put nginx in front and keep `HTTP_HOST=127.0.0.1`.
 
@@ -192,7 +195,10 @@ rows are the exception (meter local time as text, see the table).
 | Call | Returns |
 |---|---|
 | `GET /api/health` | `{ok:true}` (no login) |
-| `GET /api/config` | `{timezone, onlineAfterMin, offlineAfterMin, signing, now}` |
+| `POST /auth/login` | `{username, password}` with header `X-AMR-Data: 1`: sets the session cookie (no login) |
+| `POST /auth/logout` | ends the session (header `X-AMR-Data: 1`) |
+| `GET /auth/me` | `{username}`, or 401 when not signed in |
+| `GET /api/config` | `{timezone, onlineAfterMin, offlineAfterMin, signing, login, now}` |
 | `GET /api/meters` | `{now, counts, meters}`: each device with status, issues and key values of its newest reading with values |
 | `GET /api/fleet` | counts, readings / failed / logs per hour since midnight (`TIMEZONE`), last message, devices needing attention, status by firmware |
 | `GET /api/devices` | devices, last seen first |

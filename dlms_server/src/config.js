@@ -63,6 +63,9 @@ function loadConfig(overrides = {}) {
     idleTimeoutSec: Number(env.IDLE_TIMEOUT_SEC || 120),
     loginMaxFails: Number(env.LOGIN_MAX_FAILS || 10),
     loginLockSec: Number(env.LOGIN_LOCK_SEC || 15 * 60),
+    // Page sessions end after this long without use, or this long after sign-in
+    sessionIdleSec: Number(env.SESSION_IDLE_SEC || 12 * 3600),
+    sessionMaxSec: Number(env.SESSION_MAX_SEC || 7 * 86400),
     clock: Date.now,
     ...overrides,
   };

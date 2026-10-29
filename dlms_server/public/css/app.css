@@ -288,8 +288,6 @@ td.num.total { font-weight: 700; }
 .state.error svg.i { color: var(--bad); }
 .state.good svg.i { color: var(--ok); }
 .state .btn { margin-top: 6px; }
-.state.signed-out { min-height: 100vh; align-content: center; }
-
 /* ---------- Meter detail ---------- */
 .mhead { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 28px; padding: 14px 16px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); }
 .mhead h1 { margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; font-size: 20px; }

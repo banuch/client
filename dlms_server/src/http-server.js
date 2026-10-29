@@ -20,10 +20,15 @@
 //  Profile rows are the exception: their time t is the meter's local time as
 //  text, and from / to filter on it ("YYYY-MM-DD" or "YYYY-MM-DD hh:mm[:ss]").
 //
-//  Login: HTTP Basic with VIEW_USER / VIEW_PASSWORD. Without a password the
-//  page has no login and config.js binds it to 127.0.0.1 only. After
-//  LOGIN_MAX_FAILS wrong passwords an IP is locked out for LOGIN_LOCK_SEC.
-//  GET /logout (no login) is used by the page's Log out button, see below.
+//    POST /auth/login  {username, password}            session cookie (no login)
+//    POST /auth/logout                                 ends the session
+//    GET  /auth/me                                     {username} | 401
+//
+//  Login: VIEW_USER / VIEW_PASSWORD on the sign-in page (public/login.html),
+//  which sets an HttpOnly session cookie. Scripts may send HTTP Basic with the
+//  same login instead. Without a password the page has no login and config.js
+//  binds it to 127.0.0.1 only. After LOGIN_MAX_FAILS wrong passwords an IP is
+//  locked out for LOGIN_LOCK_SEC. The /auth POSTs need "X-AMR-Data: 1".
 // =============================================================================
 const path = require('path');
 const crypto = require('crypto');
@@ -33,7 +38,11 @@ const { SUMMARY_OBIS, buildMeters, countStatuses, attention, byFirmware, dayStar
 const DEVICE_ID = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$/;
 const OBIS = /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/;
 const ROW_TIME = /^\d{4}-\d\d-\d\d( \d\d:\d\d(:\d\d)?)?$/;
-const LOGOUT_USER = 'signed-out';
+const SESSION_COOKIE = 'amr_sid';
+const CSRF_HEADER = 'x-amr-data';   // login/logout POSTs must carry "X-AMR-Data: 1"
+const MAX_SESSIONS = 1000;
+// Served without a session so the sign-in page can load.
+const LOGIN_FILES = new Set(['/login.html', '/css/app.css', '/css/login.css', '/js/login.js']);
 
 /** A profile row time bound, null if absent, undefined if malformed. A bare date as "to" includes that day. */
 function parseRowTime(v, isTo) {
@@ -49,6 +58,17 @@ function safeEqual(a, b) {
   const ha = crypto.createHash('sha256').update(String(a)).digest();
   const hb = crypto.createHash('sha256').update(String(b)).digest();
   return crypto.timingSafeEqual(ha, hb);
+}
+
+const sha256 = (s) => crypto.createHash('sha256').update(s).digest('hex');
+
+function parseCookies(header) {
+  const out = {};
+  for (const part of String(header || '').split(';')) {
+    const eq = part.indexOf('=');
+    if (eq !== -1) out[part.slice(0, eq).trim()] = part.slice(eq + 1).trim();
+  }
+  return out;
 }
 
 function parseTime(v, dflt) {
@@ -75,47 +95,111 @@ function createHttpApp(cfg, { db, logs }) {
   app.get('/api/health', (req, res) => res.json({ ok: true }));
 
   // ── Login ────────────────────────────────────────────────────────────────
-  // Log out: the page sends LOGOUT_USER to /logout, which accepts it, so the
-  // browser stores that login in place of the real one. Afterwards the
-  // browser sends LOGOUT_USER everywhere, which is treated as "not signed in".
-  const basicUser = (req) => {
-    const m = /^Basic ([A-Za-z0-9+/=]+)$/.exec(req.get('authorization') || '');
-    if (!m) return null;
-    const text = Buffer.from(m[1], 'base64').toString('utf8');
-    const colon = text.indexOf(':');
-    return colon === -1 ? { user: text, pass: '' } : { user: text.slice(0, colon), pass: text.slice(colon + 1) };
-  };
-  app.get('/logout', (req, res) => {
-    if (basicUser(req)?.user === LOGOUT_USER) return res.status(204).end();
-    res.set('WWW-Authenticate', 'Basic realm="AMR data", charset="UTF-8"');
-    return res.status(401).json({ error: 'login_required' });
-  });
+  // Sessions live in memory (a restart signs everyone out); the cookie holds
+  // a random token and the map only its sha256.
+  const sessions = new Map();   // sha256(token) -> {created, seen}
+  const fails = new Map();      // ip -> {count, until}
 
-  const fails = new Map();   // ip -> {count, until}
-  app.use((req, res, next) => {
-    if (!cfg.viewPassword) return next();
-    const now = cfg.clock();
-    const ip = req.ip;
+  const lockedFor = (ip, now) => {
     const f = fails.get(ip);
-    if (f && f.until > now) {
-      res.set('Retry-After', String(Math.ceil((f.until - now) / 1000)));
-      return res.status(429).json({ error: 'too_many_failed_logins' });
+    return f && f.until > now ? Math.ceil((f.until - now) / 1000) : 0;
+  };
+  /** Counts a wrong password; true when the IP is now locked out. */
+  const recordFail = (ip, now) => {
+    const f = fails.get(ip);
+    let count = f ? f.count : 0;
+    if (f && f.until && f.until <= now) count = 0;   // previous lock has expired
+    count++;
+    fails.set(ip, { count, until: count >= cfg.loginMaxFails ? now + cfg.loginLockSec * 1000 : 0 });
+    if (fails.size > 10000) fails.clear();
+    return count >= cfg.loginMaxFails;
+  };
+  const passwordOk = (user, pass) => Boolean(safeEqual(user, cfg.viewUser) & safeEqual(pass, cfg.viewPassword));
+
+  const cookieAttrs = (req, maxAge) => `Path=/; HttpOnly; SameSite=Strict; Max-Age=${maxAge}${req.secure ? '; Secure' : ''}`;
+  function sessionOf(req) {
+    const token = parseCookies(req.get('cookie'))[SESSION_COOKIE];
+    if (!token) return null;
+    const id = sha256(token);
+    const s = sessions.get(id);
+    const now = cfg.clock();
+    if (!s) return null;
+    if (now - s.seen > cfg.sessionIdleSec * 1000 || now - s.created > cfg.sessionMaxSec * 1000) {
+      sessions.delete(id);
+      return null;
     }
-    const login = basicUser(req);
-    if (login && login.user !== LOGOUT_USER) {
-      const { user, pass } = login;
-      const ok = safeEqual(user, cfg.viewUser) & safeEqual(pass, cfg.viewPassword);
-      if (ok) {
-        fails.delete(ip);
+    s.seen = now;
+    return id;
+  }
+  function startSession(req, res) {
+    const now = cfg.clock();
+    for (const [id, s] of sessions) {
+      if (now - s.seen > cfg.sessionIdleSec * 1000 || now - s.created > cfg.sessionMaxSec * 1000) sessions.delete(id);
+    }
+    if (sessions.size >= MAX_SESSIONS) sessions.delete(sessions.keys().next().value);   // oldest
+    const token = crypto.randomBytes(32).toString('base64url');
+    sessions.set(sha256(token), { created: now, seen: now });
+    res.set('Set-Cookie', `${SESSION_COOKIE}=${token}; ${cookieAttrs(req, cfg.sessionMaxSec)}`);
+  }
+
+  const auth = express.Router();
+  auth.use(express.json({ limit: '4kb' }));
+  auth.use((req, res, next) => {
+    if (req.method === 'POST' && req.get(CSRF_HEADER) !== '1') return res.status(403).json({ error: 'csrf_header_missing' });
+    next();
+  });
+  auth.post('/login', (req, res) => {
+    if (!cfg.viewPassword) return res.json({ username: null });
+    const now = cfg.clock();
+    const locked = lockedFor(req.ip, now);
+    if (locked) return res.status(429).json({ error: 'locked', retry_after_s: locked });
+    const user = String(req.body?.username || '').trim();
+    const pass = String(req.body?.password || '');
+    if (!passwordOk(user, pass)) {
+      return recordFail(req.ip, now)
+        ? res.status(429).json({ error: 'locked', retry_after_s: lockedFor(req.ip, now) })
+        : res.status(401).json({ error: 'invalid_credentials' });
+    }
+    fails.delete(req.ip);
+    startSession(req, res);
+    res.json({ username: cfg.viewUser });
+  });
+  auth.post('/logout', (req, res) => {
+    const id = sessionOf(req);
+    if (id) sessions.delete(id);
+    res.set('Set-Cookie', `${SESSION_COOKIE}=; ${cookieAttrs(req, 0)}`);
+    res.json({ ok: true });
+  });
+  auth.get('/me', (req, res) => {
+    if (!cfg.viewPassword) return res.json({ username: null });
+    if (!sessionOf(req)) return res.status(401).json({ error: 'login_required' });
+    res.json({ username: cfg.viewUser });
+  });
+  app.use('/auth', auth);
+
+  app.use((req, res, next) => {
+    if (!cfg.viewPassword || LOGIN_FILES.has(req.path) || sessionOf(req)) return next();
+    // Scripts (curl, tools/check-receive.js) may send Basic. Browsers always
+    // send Sec-Fetch-Site; they must use the sign-in page, so a password the
+    // browser saved from the old login popup cannot outlive a log out.
+    const m = /^Basic ([A-Za-z0-9+/=]+)$/.exec(req.get('authorization') || '');
+    if (m && !req.get('sec-fetch-site')) {
+      const now = cfg.clock();
+      const locked = lockedFor(req.ip, now);
+      if (locked) {
+        res.set('Retry-After', String(locked));
+        return res.status(429).json({ error: 'too_many_failed_logins' });
+      }
+      const text = Buffer.from(m[1], 'base64').toString('utf8');
+      const colon = text.indexOf(':');
+      if (colon !== -1 && passwordOk(text.slice(0, colon), text.slice(colon + 1))) {
+        fails.delete(req.ip);
         return next();
       }
-      let count = f ? f.count : 0;
-      if (f && f.until && f.until <= now) count = 0;   // previous lock has expired
-      count++;
-      fails.set(ip, { count, until: count >= cfg.loginMaxFails ? now + cfg.loginLockSec * 1000 : 0 });
-      if (fails.size > 10000) fails.clear();
+      recordFail(req.ip, now);
+      return res.status(401).json({ error: 'login_required' });
     }
-    res.set('WWW-Authenticate', 'Basic realm="AMR data", charset="UTF-8"');
+    if ((req.method === 'GET' || req.method === 'HEAD') && !req.path.startsWith('/api/')) return res.redirect(302, '/login.html');
     return res.status(401).json({ error: 'login_required' });
   });
 
