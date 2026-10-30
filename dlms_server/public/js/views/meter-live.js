@@ -5,7 +5,7 @@
 import { api, devicePath } from '../api.js';
 import { num, int, meterNum, withUnit, dateTime, dateOnly, shortTime, present, unbalance, bytesText, durationText, zoneLabel } from '../format.js';
 import { esc, freshnessTag, agoText, kvList, stateBox, signedBadge, retBadge, chartTheme, debounce } from '../ui.js';
-import { O, PROFILE, valueMap, numOf, unitOf, textOf, tozKwh, tozKvah } from '../obis.js';
+import { O, PROFILE, valueMap, numOf, unitOf, textOf, tozKwhCodes, tozKvahCodes } from '../obis.js';
 
 const PHASES = [['R', 'r', 'vR', 'iR', 'pfR', 'kwR'], ['Y', 'y', 'vY', 'iY', 'pfY', 'kwY'], ['B', 'b', 'vB', 'iB', 'pfB', 'kwB']];
 
@@ -127,15 +127,23 @@ export async function renderEnergy({ meter, latest, id, signal }) {
         <td data-l="Occurred">${esc(when || '—')}</td></tr>`;
     }).join('');
 
-  // Time-of-day zones: from the reading, else from the current billing row.
+  // Time-of-day zones: from the reading, else from the current billing row,
+  // under the standard code or the meter maker's own (obis.js tozKwhCodes).
+  const zoneValue = (codes) => {
+    for (const obis of codes) {
+      const v = m.get(obis) || billing?.values.get(obis);
+      if (v) return v;
+    }
+    return undefined;
+  };
   const tou = [1, 2, 3, 4, 5, 6, 7, 8].map((n) => {
-    const kwh = m.get(tozKwh(n)) || billing?.values.get(tozKwh(n));
-    const kvah = m.get(tozKvah(n)) || billing?.values.get(tozKvah(n));
+    const kwh = zoneValue(tozKwhCodes(n));
+    const kvah = zoneValue(tozKvahCodes(n));
     if (![kwh, kvah].some((v) => v && v.num)) return '';
     const cell = (v) => (v && v.num !== null ? withUnit(meterNum(v.num, 2), v.unit) : '—');
     return `<tr><td class="full"><b>TZ${n}</b></td><td class="num val" data-l="Active energy">${esc(cell(kwh))}</td><td class="num val" data-l="Apparent energy">${esc(cell(kvah))}</td></tr>`;
   }).join('');
-  const touFromBilling = tou && !m.has(tozKwh(1)) && billing;
+  const touFromBilling = tou && !tozKwhCodes(1).some((obis) => m.has(obis)) && billing;
 
   return `<div class="${staleClass(meter)}">
     <h2 class="section">Energy registers ${energyFromBilling && registers ? `<small>from the current billing row ${esc(billing.t || '')}</small>` : ''}</h2>
