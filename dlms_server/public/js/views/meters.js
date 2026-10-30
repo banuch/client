@@ -120,7 +120,7 @@ export function createMetersView(route, context) {
     } else if (rows.length === 0) {
       body.innerHTML = emptyRow(COLUMNS, 'No meters match these filters', 'Clear the search or choose another status.');
     } else {
-      body.innerHTML = rows.slice((state.page - 1) * PAGE_SIZE, state.page * PAGE_SIZE).map((m) => `<tr class="${m.status === 'offline' ? 'stale' : ''}">
+      body.innerHTML = rows.slice((state.page - 1) * PAGE_SIZE, state.page * PAGE_SIZE).map((m) => `<tr class="row-link${m.status === 'offline' ? ' stale' : ''}" data-href="#/meters/${encodeURIComponent(m.id)}">
         <td class="full"><a class="link" href="#/meters/${encodeURIComponent(m.id)}">${esc(meterName(m))}</a><span class="sub">${esc([...meterIds(m), m.manufacturer].filter(Boolean).join(' · ') || ' ')}</span></td>
         <td data-l="Status">${statusBadge(m.status)}</td>
         <td data-l="Last message">${timeCell(m.lastSeen)}</td>
@@ -201,6 +201,10 @@ export function createMetersView(route, context) {
           return renderRows();
         }
         if (e.target.closest('[data-action=retry]')) context.reload('manual');
+        // Whole rows open their meter; links and buttons inside keep their own action,
+        // and selecting text (to copy an IMEI) does not navigate.
+        const row = e.target.closest('tr[data-href]');
+        if (row && !e.target.closest('a, button') && !window.getSelection().toString()) location.hash = row.dataset.href;
       });
       root.addEventListener('keydown', (e) => {
         const header = e.target.closest('th[data-sort]');
