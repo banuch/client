@@ -173,6 +173,23 @@ test('profile rows are stored once and served by profile', async () => {
   });
 });
 
+test('event rows of the marker second, resent every cycle (FW 2.0.11), are stored once', async () => {
+  const T = '2026-03-07 22:56:25';
+  const events = (codes) => ({
+    obis: '0.0.99.98.0.255', name: 'Event Log: Voltage',
+    cols: [{ obis: '0.0.1.0.0.255', name: 'Clock', u: '' }, { obis: '0.0.96.11.0.255', name: 'Event Code: Voltage', u: '' }],
+    rows: codes.map((c) => ({ t: T, c: [T, c], e: `event ${c}` })),
+  });
+  await withServer({}, async (s) => {
+    const msg = (seq, profiles) => buildMessage({ type: 'READING', deviceId: IMEI, boot: 5, seq, fw: '2.0.11',
+      body: JSON.stringify({ ...READING, profiles }), key: KEY });
+    // Cycle 1 sees event 7; cycle 2 sends it again with event 9, logged later in the same second.
+    await send(s.tcpPort, Buffer.concat([msg(0, [events([7])]), msg(1, [events([7, 9])]), msg(2, [events([7, 9])])]), 3);
+    const ev = await get(s, `/api/devices/${IMEI}/profiles/0.0.99.98.0.255`);
+    assert.deepStrictEqual(ev.body.rows.map((r) => r.c[1]).sort(), [7, 9]);
+  });
+});
+
 test('profiles exactly as the firmware formats them (reading_upload.ino rd_profile*)', async () => {
   await withServer({}, async (s) => {
     const body = '{"ret":0,"values":[],"profiles":[{"obis":"1.0.98.1.0.255","name":"Billing Profile",' +
@@ -243,10 +260,34 @@ test('a bad profile is skipped, the reading and good profiles are stored', async
       rows: [{ t: '2026-10-23 00:00:00', c: ['2026-10-23 00:00:00'] }] };
     const body = JSON.stringify({ ...READING, profiles: [{ obis: '1.0.99.1.0.255', cols: [], rows: [{ t: 'now', c: [] }] }, good] });
     const replies = await send(s.tcpPort, buildMessage({ type: 'READING', deviceId: IMEI, boot: 1, seq: 0, body, key: KEY }), 1);
-    assert.deepStrictEqual(replies[0], { ok: true, type: 'READING', seq: 0, skipped: 1 });
+    assert.deepStrictEqual(replies[0], { ok: true, type: 'READING', seq: 0, skipped: 1, skippedObis: ['1.0.99.1.0.255'] });
     const list = await get(s, `/api/devices/${IMEI}/profiles`);
     assert.deepStrictEqual(list.body.map((p) => p.obis), ['1.0.99.2.0.255']);
     assert.strictEqual((await get(s, `/api/devices/${IMEI}/latest`)).body.valueCount, READING.values.length);
+  });
+});
+
+test('skippedObis is null for a profile without a valid OBIS, and fits the firmware reply limit', async () => {
+  await withServer({}, async (s) => {
+    const bad = (obis) => ({ obis, cols: [], rows: [{ t: 'now', c: [] }] });
+    // 50 = reading.js MAX_PROFILES, all refused: the longest reply line there can be.
+    const profiles = [bad('x'), ...Array.from({ length: 49 }, (_, i) => bad(`255.255.255.255.${i}.255`))];
+    const body = JSON.stringify({ ...READING, profiles });
+    const msg = buildMessage({ type: 'READING', deviceId: IMEI, boot: 1, seq: 0, body, key: KEY });
+    const raw = await new Promise((resolve, reject) => {
+      const sock = net.connect(s.tcpPort, '127.0.0.1', () => sock.write(msg));
+      let buf = '';
+      sock.on('data', (d) => {
+        buf += d.toString();
+        if (buf.includes('\n')) { sock.end(); resolve(buf.slice(0, buf.indexOf('\n'))); }
+      });
+      sock.on('error', reject);
+    });
+    const reply = JSON.parse(raw);
+    assert.strictEqual(reply.skipped, 50);
+    assert.strictEqual(reply.skippedObis[0], null);
+    assert.strictEqual(reply.skippedObis[1], '255.255.255.255.0.255');
+    assert.ok(raw.length < 2048, `reply is ${raw.length} bytes; log_bridge.ino LB_REPLY_MAX is 2048`);
   });
 });
 

@@ -21,7 +21,8 @@
 //  RD_QUEUE_MAX cycles are kept; when it is full the oldest is dropped.
 //
 //  Profile markers ("newest row sent", see profiles.ino) ride along with the
-//  item and are saved to NVS when it is sent. Until then the RAM copy is
+//  item and are saved to NVS when it is sent, except those of profiles the
+//  server skipped (rd_popStored). Until then the RAM copy is
 //  ahead, so the next cycle does not queue the same rows again. A dropped
 //  item rolls the RAM copy back to NVS and clears the markers of the items
 //  still queued: its rows are read again (the server drops duplicates).
@@ -430,6 +431,9 @@ void rd_end(int ret)
   }
   if (copy == NULL)
   {
+    //This cycle already moved the RAM markers past its rows: back to NVS,
+    //so the next cycle reads them again.
+    g_mkRamCount = 0;
     TraceSerial.print("\r\n[DATA] Out of memory, reading not queued\r\n");
     return;
   }
@@ -485,6 +489,41 @@ void rd_pop(bool sent)
   g_rdQueue[g_rdHead].body = NULL;
   g_rdHead = (g_rdHead + 1) % RD_QUEUE_MAX;
   --g_rdCount;
+}
+
+static void mk_remove(PgMark* list, uint8_t* count, const char* key)
+{
+  PgMark* m = mk_find(list, *count, key);
+  if (m != NULL)
+  {
+    *m = list[--*count];
+  }
+}
+
+//The server stored the oldest reading but skipped the profiles with these
+//marker keys: save the other markers. The skipped profiles go back to their
+//NVS markers, also in the readings still queued, so their rows are read again.
+void rd_popStored(const PgMarkKey* skipped, uint8_t count)
+{
+  if (g_rdCount == 0)
+  {
+    return;
+  }
+  RdItem* item = &g_rdQueue[g_rdHead];
+  for (uint8_t k = 0; k != count; ++k)
+  {
+    mk_remove(item->marks, &item->markCount, skipped[k]);
+  }
+  rd_pop(true);
+  for (uint8_t k = 0; k != count; ++k)
+  {
+    mk_remove(g_mkRam, &g_mkRamCount, skipped[k]);
+    for (uint8_t i = 0; i != g_rdCount; ++i)
+    {
+      RdItem* q = &g_rdQueue[(g_rdHead + i) % RD_QUEUE_MAX];
+      mk_remove(q->marks, &q->markCount, skipped[k]);
+    }
+  }
 }
 
 //The server refused the oldest reading: forget it without saving its

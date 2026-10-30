@@ -7,7 +7,9 @@
 //
 //    {"ok":true,"type":"READING","seq":N}            stored
 //    {"ok":true,"type":"READING","seq":N,"dup":true} already stored before
-//    {"ok":true,"type":"READING","seq":N,"skipped":K} stored without K bad profiles
+//    {"ok":true,"type":"READING","seq":N,"skipped":K,"skippedObis":[...]}
+//                                                    stored without K bad profiles; their
+//                                                    OBIS codes, null where it was not valid
 //    {"ok":false,"seq":N,"error":"bad_signature"}    rejected, connection stays open
 //    {"ok":false,"error":"<framing error>"}          then the connection is closed
 //
@@ -20,6 +22,7 @@ const { checkMessage } = require('./verify');
 const { parseReading } = require('./reading');
 
 const MAX_AGE_S = 30 * 86400;   // a queued reading older than this is suspect
+const OBIS = /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/;
 
 function createTcpServer(cfg, { db, logs, log = console.log }) {
   const limits = {
@@ -57,7 +60,11 @@ function createTcpServer(cfg, { db, logs, log = console.log }) {
         ` ret=${parsed.reading.ret} age=${age}s${stored ? '' : ' duplicate'}${tag}`);
       const res = { ok: true, type: 'READING', seq: header.seq };
       if (!stored) res.dup = true;
-      if (skipped.length) res.skipped = skipped.length;
+      if (skipped.length) {
+        res.skipped = skipped.length;
+        // FW 2.0.11+ keeps these profiles' markers, so their rows are read again.
+        res.skippedObis = skipped.map((k) => (k.obis && OBIS.test(k.obis) ? k.obis : null));
+      }
       return res;
     }
 

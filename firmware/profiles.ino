@@ -28,7 +28,8 @@
 //                    per profile, so the uploaded log stays small.
 //
 //  Upload (reading_upload.ino, rd_profile*):
-//    block load, daily load, event logs  rows newer than the profile's marker
+//    block load, daily load              rows newer than the profile's marker
+//    event logs                          rows from the marker's second on
 //    billing                             the current (newest) row every time,
 //                                        closed months newer than the marker
 //    instantaneous, name plate, others   every row read
@@ -810,8 +811,12 @@ static uint16_t pg_collect(const AvEntry* p, PgKind kind, const PgColumn* cols, 
     {
       case PG_BLOCK:
       case PG_DAILY:
-      case PG_EVENT:
         send = hasTime[r] && times[r] > mark;
+        break;
+      case PG_EVENT:
+        //Also the marker's own second: a second event in it may have been
+        //logged after the last read. The server drops the one it has.
+        send = hasTime[r] && times[r] >= mark;
         break;
       case PG_BILLING:
         send = (int32_t)r == newest || (hasTime[r] && times[r] > mark);

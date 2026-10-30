@@ -20,7 +20,9 @@
 //
 //  After each reading the server's reply line is read:
 //    {"ok":true,...}            stored (or a duplicate): it leaves the queue
-//                               and its profile markers are saved
+//                               and its profile markers are saved, except
+//                               those of the profiles in "skippedObis" (all
+//                               of them if a skipped one is not named)
 //    {"ok":false,"seq":N,...}   refused: it leaves the queue, markers are
 //                               not saved, so its rows are read again
 //    no reply / framing error   upload failed, sent again next cycle
@@ -35,6 +37,7 @@
 
 #define LB_CHUNK 1024
 #define LB_REPLY_TIMEOUT_MS 15000   // server reply to one READING
+#define LB_REPLY_MAX 2048           // longest reply line (50 skipped profiles fit)
 
 static uint32_t g_lbSeq = 0;
 static uint32_t g_lbBoot = 0;
@@ -138,10 +141,66 @@ static bool lb_sendReading(const RdItem* item)
   return true;
 }
 
+//Marker keys (pg_markKey) of the profiles a reply line says the server
+//skipped ("skippedObis", dlms_server tcp-server.js). False when they cannot
+//all be named: an older server sends only "skipped", an entry is null, or
+//there are more than PG_MARK_MAX. No "skipped" at all: true, count 0.
+static bool lb_skippedKeys(const String& line, PgMarkKey* keys, uint8_t* count)
+{
+  *count = 0;
+  int k = line.indexOf("\"skipped\":");
+  if (k == -1)
+  {
+    return true;
+  }
+  long skipped = line.substring(k + 10).toInt();
+  int pos = line.indexOf("\"skippedObis\":[");
+  if (pos == -1)
+  {
+    return false;
+  }
+  pos += 15;
+  while (pos < (int)line.length())
+  {
+    char c = line[pos];
+    if (c == ']')
+    {
+      return *count == skipped;
+    }
+    if (c == ',' || c == ' ')
+    {
+      ++pos;
+      continue;
+    }
+    int end = c == '"' ? line.indexOf('"', pos + 1) : -1;
+    unsigned v[6];
+    char tail;
+    if (end == -1 || *count == PG_MARK_MAX ||
+        sscanf(line.substring(pos + 1, end).c_str(), "%u.%u.%u.%u.%u.%u%c",
+               &v[0], &v[1], &v[2], &v[3], &v[4], &v[5], &tail) != 6)
+    {
+      return false;   //null, or not an OBIS code
+    }
+    unsigned char ln[6];
+    for (int i = 0; i != 6; ++i)
+    {
+      if (v[i] > 255)
+      {
+        return false;
+      }
+      ln[i] = (unsigned char)v[i];
+    }
+    pg_markKey(ln, keys[(*count)++], sizeof(PgMarkKey));
+    pos = end + 1;
+  }
+  return false;   //no closing ']'
+}
+
 //Server reply to a READING (tcp-server.js): 1 stored, 0 refused, -1 no
 //usable reply (timeout, connection closed, framing error, store failed).
-//Trace capture is off during the upload, so notes for the log go to `notes`.
-static int lb_readReply(const RdItem* item, String& notes)
+//The reply line itself goes to `reply`. Trace capture is off during the
+//upload, so notes for the log go to `notes`.
+static int lb_readReply(const RdItem* item, String& notes, String& reply)
 {
   String line;
   uint8_t buf[128];
@@ -149,7 +208,7 @@ static int lb_readReply(const RdItem* item, String& notes)
   uint32_t start = millis();
   while (line.indexOf('\n') == -1)
   {
-    if (millis() - start > LB_REPLY_TIMEOUT_MS || line.length() > 512)
+    if (millis() - start > LB_REPLY_TIMEOUT_MS || line.length() > LB_REPLY_MAX)
     {
       notes += String("[DATA] Reading seq ") + item->seq + ": no reply from server\r\n";
       return -1;
@@ -174,13 +233,14 @@ static int lb_readReply(const RdItem* item, String& notes)
     }
   }
   line = line.substring(0, line.indexOf('\n'));
+  reply = line;
   if (line.indexOf("\"ok\":true") != -1)
   {
     int k = line.indexOf("\"skipped\":");
     if (k != -1)
     {
       notes += String("[DATA] Reading seq ") + item->seq + " stored, server skipped " +
-               line.substring(k + 10).toInt() + " profiles\r\n";
+               line.substring(k + 10).toInt() + " profiles, their rows are read again: " + line + "\r\n";
     }
     return 1;
   }
@@ -253,11 +313,23 @@ void lb_upload()
     for (RdItem* item = rd_peek(); ok && item != NULL; item = rd_peek())
     {
       ok = lb_sendReading(item);
-      int reply = ok ? lb_readReply(item, notes) : -1;
+      String line;
+      int reply = ok ? lb_readReply(item, notes, line) : -1;
       ok = reply >= 0;
-      if (reply == 1)
+      PgMarkKey skippedKeys[PG_MARK_MAX];
+      uint8_t skippedCount;
+      if (reply == 1 && lb_skippedKeys(line, skippedKeys, &skippedCount))
       {
-        rd_pop(true);
+        //Stored: save the markers, except those of skipped profiles.
+        rd_popStored(skippedKeys, skippedCount);
+        ++readings;
+      }
+      else if (reply == 1)
+      {
+        //Stored, but which profiles were skipped is not known: save no
+        //marker, so every profile of it is read again (the server drops
+        //the rows it already has).
+        rd_reject();
         ++readings;
       }
       else if (reply == 0)
