@@ -18,10 +18,11 @@ function friendlyMessage(status, code) {
   return `The server returned an error (${status}).`;
 }
 
-// A body is sent as JSON with "X-AMR-Data: 1", which the server needs on writes.
+// Writes carry "X-AMR-Data: 1", which the server needs; a body is sent as JSON.
 export async function api(path, { signal, text = false, method = 'GET', body } = {}) {
   const headers = { Accept: text ? 'text/plain' : 'application/json' };
-  if (body !== undefined) Object.assign(headers, { 'Content-Type': 'application/json', 'X-AMR-Data': '1' });
+  if (method !== 'GET') headers['X-AMR-Data'] = '1';
+  if (body !== undefined) headers['Content-Type'] = 'application/json';
   let res;
   try {
     res = await fetch(path, { method, headers, body: body === undefined ? undefined : JSON.stringify(body), signal });

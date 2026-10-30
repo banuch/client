@@ -523,3 +523,44 @@ test('overview endpoints: config, meters, fleet, stats, chart library', async ()
     assert.match(await chart.text(), /Chart/);
   });
 });
+
+test('delete device: removes its readings, profiles and logs, keeps other devices', async () => {
+  await withServer({}, async (s, dataDir) => {
+    const OTHER = '868000000000001';
+    const del = (id, headers = { 'X-AMR-Data': '1' }) => fetch(`http://127.0.0.1:${s.httpPort}/api/devices/${id}`, {
+      method: 'DELETE',
+      headers: { Authorization: 'Basic ' + Buffer.from(`admin:${PASSWORD}`).toString('base64'), ...headers },
+    }).then(async (r) => ({ status: r.status, body: await r.json() }));
+    const block = {
+      obis: '1.0.99.1.0.255', name: 'Block Load Profile',
+      cols: [{ obis: '0.0.1.0.0.255', name: 'Clock', u: '' }],
+      rows: [{ t: '2026-10-23 10:00:00', c: ['2026-10-23 10:00:00'] }, { t: '2026-10-23 10:30:00', c: ['2026-10-23 10:30:00'] }],
+    };
+    const reading = (id, seq) => buildMessage({ type: 'READING', deviceId: id, boot: 1, seq,
+      body: JSON.stringify({ ...READING, profiles: [block] }), key: deviceKey(SECRET, id) });
+    await send(s.tcpPort, Buffer.concat([
+      reading(IMEI, 0), reading(IMEI, 1), reading(OTHER, 0),
+      buildMessage({ type: 'LOG', deviceId: IMEI, boot: 1, seq: 0, body: 'hello\n', key: KEY }),
+    ]), 4);
+    assert.ok(fs.existsSync(path.join(dataDir, 'logs', IMEI)));
+
+    assert.strictEqual((await del(IMEI, {})).status, 403, 'needs the X-AMR-Data header');
+    assert.strictEqual((await del('nope')).status, 404);
+    assert.deepStrictEqual((await del(IMEI)).body, {
+      id: IMEI,
+      removed: { readings: 2, profileRows: 2, profileColumns: 1, logUploads: 1, devices: 1, logFiles: 1 },
+    });
+
+    assert.deepStrictEqual((await get(s, '/api/meters')).body.meters.map((m) => m.id), [OTHER]);
+    assert.strictEqual((await get(s, `/api/devices/${IMEI}/latest`)).status, 404);
+    assert.ok(!fs.existsSync(path.join(dataDir, 'logs', IMEI)), 'log folder removed');
+    const Database = require('better-sqlite3');
+    const db = new Database(s.cfg.dbFile, { readonly: true });
+    for (const table of ['readings', 'profile_rows', 'profile_columns', 'log_uploads']) {
+      assert.strictEqual(db.prepare(`SELECT COUNT(*) AS n FROM ${table} WHERE device_id = ?`).get(IMEI).n, 0, table);
+    }
+    assert.strictEqual(db.prepare('SELECT COUNT(*) AS n FROM reading_values').get().n, READING.values.length, 'only the other device\'s values remain');
+    db.close();
+    assert.strictEqual((await get(s, `/api/devices/${OTHER}/profiles`)).body[0].rowCount, 2);
+  });
+});

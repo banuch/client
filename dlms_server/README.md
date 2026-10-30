@@ -118,6 +118,15 @@ messages never change. Two devices may share a name; the meter page then warns
 about it. Scripts can set a name with
 `curl -u admin:<VIEW_PASSWORD> -X PUT -H 'X-AMR-Data: 1' -H 'Content-Type: application/json' -d '{"name":"Feeder B"}' http://<host>:7002/api/devices/<IMEI>/name`.
 
+### Deleting a meter
+
+The 🗑 button next to the title on the meter page deletes the meter after a
+confirmation: its row in `devices`, all its readings and values, profile rows and
+columns, log upload records and its serial log folder `logs/<IMEI>/`. It cannot be
+undone. A device that is still sending is added again, empty, by its next message
+(its OTA registration is not touched). Scripts can delete with
+`curl -u admin:<VIEW_PASSWORD> -X DELETE -H 'X-AMR-Data: 1' http://<host>:7002/api/devices/<IMEI>`.
+
 Values of the latest reading are matched by OBIS code (`public/js/obis.js`,
 names as in `firmware/obis_names.h`) and shown with the unit the device sent.
 Server times are shown in `TIMEZONE`; profile times are the meter's own clock.
@@ -234,6 +243,8 @@ rows are the exception (meter local time as text, see the table).
 | `GET /api/devices/:id/profiles/:obis?from=&to=&limit=` | `{obis, name, cols, rows}`, rows newest first (default 500, max 5000). `from` / `to` are meter local time `YYYY-MM-DD[ hh:mm[:ss]]`; a bare `to` date includes that day. |
 | `GET /api/devices/:id/log-dates` | days with a log file, newest first |
 | `GET /api/devices/:id/logs?date=YYYY-MM-DD&tail=65536` | end of that day's log (text) |
+| `PUT /api/devices/:id/name` | `{name}` with header `X-AMR-Data: 1`: sets the name shown on the page (`""` clears it) |
+| `DELETE /api/devices/:id` | with header `X-AMR-Data: 1`: deletes the device and all its data, returns `{id, removed}` (rows per table, `logFiles`) |
 
 ## Settings
 

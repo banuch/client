@@ -63,6 +63,7 @@ export function createMeterView(route, context) {
     }
     title.innerHTML = `${esc(meterName(meter))}
       <button class="btn small icon-only ghost" type="button" data-action="rename" data-tip="Rename device" aria-label="Rename device">${icon('edit')}</button>
+      <button class="btn small icon-only ghost" type="button" data-action="delete" data-tip="Delete meter and all its data" aria-label="Delete meter and all its data">${icon('trash')}</button>
       ${statusBadge(meter.status)} ${signedBadge(meter.verified)}`;
   }
 
@@ -99,6 +100,23 @@ export function createMeterView(route, context) {
       context.reload('manual');
     } catch (error) {
       button.disabled = false;
+      toast(error.message, 'warn');
+    }
+  }
+
+  async function deleteMeter() {
+    const name = meterName(meter);
+    const ok = await confirmDialog({
+      title: `Delete ${name}?`,
+      message: `Every reading, load profile, event and billing row and serial log stored for IMEI ${meter.id} will be deleted. This cannot be undone. If the device is still sending, its next message adds it again as a new meter.`,
+      confirmLabel: 'Delete meter',
+    });
+    if (!ok) return;
+    try {
+      const { removed } = await api(devicePath(id), { method: 'DELETE' });
+      toast(`Deleted ${name}: ${removed.readings} readings, ${removed.profileRows} profile rows, ${removed.logFiles} log files.`);
+      location.hash = '#/meters';
+    } catch (error) {
       toast(error.message, 'warn');
     }
   }
@@ -205,6 +223,7 @@ export function createMeterView(route, context) {
         if (e.target.closest('#meterPane > .state [data-action=retry], #meterRetry')) context.reload('manual');
         if (e.target.closest('[data-action=rename]')) { renaming = true; renderName(); }
         if (e.target.closest('[data-action=rename-cancel]')) { renaming = false; renderName(); }
+        if (e.target.closest('[data-action=delete]')) deleteMeter();
       });
       root.addEventListener('submit', (e) => {
         if (e.target.id !== 'renameForm') return;
