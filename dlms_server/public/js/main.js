@@ -117,8 +117,11 @@ function route() {
   updateOutdated();
   view = VIEWS[next.name](next, context);
   view.routeName = next.name;
-  const root = byId('view');
-  root.innerHTML = '';
+  // A new element for each view: listeners a view added to the old one must
+  // not act on the next view (renaming one meter renamed the one seen before).
+  const old = byId('view');
+  const root = old.cloneNode(false);
+  old.replaceWith(root);
   view.mount(root);
   window.scrollTo(0, 0);
   runLoad('initial');
