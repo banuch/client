@@ -59,6 +59,10 @@ export const EVENT_CATEGORIES = [
 
 export const tozKwh = (n) => `1.0.1.8.${n}.255`;
 export const tozKvah = (n) => `1.0.9.8.${n}.255`;
+// Codes a zone value may be under, standard first. Secure meters keep their
+// zones under 1.0.129.8.n (kWh) and 1.0.137.8.n (kVAh) instead.
+export const tozKwhCodes = (n) => [tozKwh(n), `1.0.129.8.${n}.255`];
+export const tozKvahCodes = (n) => [tozKvah(n), `1.0.137.8.${n}.255`];
 
 // Latest reading values by OBIS code.
 export function valueMap(values) {
