@@ -1,5 +1,7 @@
 // Application shell: hash router, one refresh timer for the visible view,
-// meter search, "updated" indicator and the outdated-data banner.
+// sidebar (groups with live counts, icon rail, drawer on small screens),
+// meter search, connection indicator, theme, account menu and the
+// outdated-data banner.
 import { api, isAbort } from './api.js';
 import { setTimeZone, zoneLabel, clockTime, ago, durationText, meterName, meterIds } from './format.js';
 import { byId, esc, icon, toast, debounce, statusBadge } from './ui.js';
@@ -9,21 +11,33 @@ import { createMeterView } from './views/meter.js';
 
 const VIEWS = { home: createHomeView, meters: createMetersView, meter: createMeterView };
 const settings = { timezone: 'Asia/Kolkata', onlineAfterMin: 35, offlineAfterMin: 90, signing: 'off' };
+const RAIL_KEY = 'amr-nav';
+const wideMedia = window.matchMedia('(min-width: 1280px)');
+const drawerMedia = window.matchMedia('(max-width: 1023px)');
 
 let view = null;
 let loadController = null;
 let refreshTimer = null;
 let lastSuccessAt = null;
+let account = { username: null };
 
 const context = {
   settings,
   setCrumb(html) { byId('crumb').innerHTML = html; },
+  // Counts next to the Fleet links; the problem ones only when not zero.
   setAlertCount(counts) {
-    const n = (counts?.offline || 0) + (counts?.readFailed || 0);
-    byId('navAlert').textContent = String(n);
-    byId('navAlert').classList.toggle('hidden', n === 0);
+    if (!counts) return;
+    const tone = { offline: 'bad', readFailed: 'bad', unsigned: 'warn' };
+    document.querySelectorAll('[data-count]').forEach((badge) => {
+      const key = badge.dataset.count;
+      const n = counts[key] || 0;
+      badge.textContent = String(n);
+      badge.className = `count${tone[key] && n ? ` ${tone[key]}` : ''}${n || key === 'total' ? '' : ' hidden'}`;
+      badge.closest('a').classList.toggle('flag', (key === 'offline' || key === 'readFailed') && n > 0);
+    });
   },
   reload: (reason = 'manual') => runLoad(reason),
+  syncNav: () => setNav(parseRoute()),
 };
 
 function parseRoute() {
@@ -38,17 +52,19 @@ function parseRoute() {
   return { name: 'home', params };
 }
 
+// Connection pill: live with the time of the last load, updating, or failed.
 function setUpdated(state, detail = '') {
   const box = byId('updated');
-  box.classList.toggle('failed', state === 'failed');
+  box.className = `conn ${state}`;
   if (state === 'loading') {
-    box.innerHTML = '<span class="spinner" aria-hidden="true"></span><span class="long">Updating…</span>';
+    box.innerHTML = '<span class="dot" aria-hidden="true"></span><span class="long">Updating…</span>';
+    box.title = 'Loading the latest data';
   } else if (state === 'failed') {
-    box.innerHTML = `${icon('warn')}<span><span class="long">Update failed · </span>${esc(detail)}</span>`;
-    box.title = 'The latest refresh failed; the page shows the data from the time given.';
+    box.innerHTML = `<span class="dot" aria-hidden="true"></span><span class="long">Connection problem · ${esc(detail)}</span>`;
+    box.title = `The latest refresh failed; the page shows ${detail}.`;
   } else {
-    box.innerHTML = `${icon('clock')}<span><span class="long">Updated </span>${esc(clockTime(Date.now()))}</span>`;
-    box.title = `Data loaded at this time (${zoneLabel()}).`;
+    box.innerHTML = `<span class="dot" aria-hidden="true"></span><span class="long">Live · ${esc(clockTime(Date.now()))}</span>`;
+    box.title = `Data loaded at ${clockTime(Date.now())} (${zoneLabel()}); refreshes every 30 s.`;
   }
 }
 
@@ -92,8 +108,11 @@ async function runLoad(reason) {
   }
 }
 
-function setNav(name) {
-  const section = name === 'meter' ? 'meters' : name;
+// Meters filtered by status light up their own Fleet link.
+function setNav(next) {
+  let section = next.name === 'meter' ? 'meters' : next.name;
+  const status = next.name === 'meters' ? next.params.get('status') : null;
+  if (status && document.querySelector(`[data-nav="meters:${status}"]`)) section = `meters:${status}`;
   document.querySelectorAll('[data-nav]').forEach((link) => {
     const active = link.dataset.nav === section;
     link.classList.toggle('active', active);
@@ -105,7 +124,7 @@ function setNav(name) {
 function route() {
   const next = parseRoute();
   closeNav();
-  setNav(next.name);
+  setNav(next);
   if (view && view.routeName === next.name && view.update?.(next)) {
     runLoad('route');
     return;
@@ -132,6 +151,21 @@ function closeNav() {
   byId('menuButton').setAttribute('aria-expanded', 'false');
 }
 
+function railPreferred() {
+  try { return localStorage.getItem(RAIL_KEY) === 'rail'; } catch { return false; }
+}
+
+// Icon rail: always between 1024 and 1279 px, by choice from 1280 px; below
+// 1024 px the sidebar is a drawer with labels.
+function applyRail() {
+  const rail = !drawerMedia.matches && (!wideMedia.matches || railPreferred());
+  byId('shell').classList.toggle('rail', rail);
+  const button = byId('collapseButton');
+  button.classList.toggle('hidden', !wideMedia.matches);
+  button.setAttribute('aria-pressed', String(rail));
+  button.setAttribute('aria-label', rail ? 'Expand sidebar' : 'Collapse sidebar');
+}
+
 function initNav() {
   byId('menuButton').addEventListener('click', () => {
     const open = byId('shell').classList.toggle('nav-open');
@@ -140,6 +174,125 @@ function initNav() {
   byId('scrim').addEventListener('click', closeNav);
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeNav(); });
   byId('refreshButton').addEventListener('click', () => runLoad('manual'));
+  byId('collapseButton').addEventListener('click', () => {
+    try { localStorage.setItem(RAIL_KEY, railPreferred() ? 'full' : 'rail'); } catch { /* lasts for this page */ }
+    applyRail();
+    hideTip();
+  });
+  wideMedia.addEventListener('change', applyRail);
+  drawerMedia.addEventListener('change', applyRail);
+  applyRail();
+}
+
+// Tooltips for [data-tip]: sidebar items only while it is an icon rail,
+// other elements (icon buttons) always.
+let tipBox = null;
+function hideTip() {
+  tipBox?.remove();
+  tipBox = null;
+}
+function showTip(el) {
+  const inSidebar = el.closest('#sidebar');
+  if (inSidebar && !byId('shell').classList.contains('rail')) return;
+  if (!el.getClientRects().length) return;
+  hideTip();
+  tipBox = document.createElement('div');
+  tipBox.className = 'tip';
+  tipBox.setAttribute('role', 'tooltip');
+  tipBox.textContent = el.id === 'collapseButton' ? el.getAttribute('aria-label') : el.dataset.tip;
+  document.body.append(tipBox);
+  const r = el.getBoundingClientRect();
+  const t = tipBox.getBoundingClientRect();
+  if (inSidebar) {
+    tipBox.style.left = `${r.right + 10}px`;
+    tipBox.style.top = `${r.top + (r.height - t.height) / 2}px`;
+  } else {
+    tipBox.style.left = `${Math.max(8, Math.min(innerWidth - t.width - 8, r.left + (r.width - t.width) / 2))}px`;
+    tipBox.style.top = `${r.bottom + 8}px`;
+  }
+}
+function initTips() {
+  const target = (e) => e.target.closest?.('[data-tip]');
+  document.addEventListener('mouseover', (e) => { const el = target(e); if (el) showTip(el); });
+  document.addEventListener('mouseout', (e) => { if (target(e)) hideTip(); });
+  document.addEventListener('focusin', (e) => {
+    const el = target(e);
+    if (el && el.matches(':focus-visible')) showTip(el);
+    else hideTip();
+  });
+  document.addEventListener('focusout', hideTip);
+  document.addEventListener('click', hideTip);
+  window.addEventListener('scroll', hideTip, { passive: true });
+}
+
+// The theme button flips light/dark; the account menu also offers "System".
+function syncThemeButton() {
+  const dark = document.documentElement.dataset.theme === 'dark';
+  byId('themeButton').querySelector('use').setAttribute('href', dark ? '#i-sun' : '#i-moon');
+  byId('themeButton').dataset.tip = dark ? 'Switch to light theme' : 'Switch to dark theme';
+}
+
+function initTheme() {
+  syncThemeButton();
+  byId('themeButton').addEventListener('click', () => {
+    window.amrTheme.set(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark');
+  });
+  // Charts take their colours when drawn, so the page is drawn again.
+  document.addEventListener('themechange', () => {
+    syncThemeButton();
+    if (!byId('accountMenu').classList.contains('hidden')) renderAccountMenu();
+    runLoad('theme');
+  });
+}
+
+// Account menu: who is signed in, theme, the server's status settings, log out.
+function renderAccountMenu() {
+  const pref = window.amrTheme.get();
+  const option = (value, label, symbol) => `<button type="button" data-theme-pref="${value}" class="${pref === value ? 'active' : ''}" aria-pressed="${pref === value}">${icon(symbol)}${label}</button>`;
+  const signing = { off: 'not checked (no MASTER_SECRET)', checked: 'checked, unsigned accepted', required: 'required' }[settings.signing];
+  byId('accountMenu').innerHTML = `<div class="menu-head"><span class="avatar" aria-hidden="true">${esc((account.username || 'V')[0])}</span>
+      <div><strong>${esc(account.username || 'Viewer')}</strong><small>${settings.login ? 'Signed in' : 'No login on this server'}</small></div></div>
+    <div class="menu-label">Theme</div>
+    <div class="segmented" role="group" aria-label="Theme">${option('system', 'System', 'monitor')}${option('light', 'Light', 'sun')}${option('dark', 'Dark', 'moon')}</div>
+    <div class="menu-label">Server settings</div>
+    <div class="menu-info">Online = message within ${esc(settings.onlineAfterMin)} min<br>Offline after ${esc(settings.offlineAfterMin)} min without a message<br>
+      Signatures ${esc(signing || settings.signing)}<br>Times in ${esc(zoneLabel())} (${esc(settings.timezone)})</div>
+    ${settings.login ? `<div class="menu-sep"></div><button class="menu-item danger" type="button" data-action="logout">${icon('logout')}Log out</button>` : ''}`;
+}
+
+function closeMenu() {
+  byId('accountMenu').classList.add('hidden');
+  byId('accountButton').setAttribute('aria-expanded', 'false');
+}
+
+function initAccountMenu() {
+  const button = byId('accountButton');
+  const menu = byId('accountMenu');
+  button.addEventListener('click', () => {
+    if (!menu.classList.contains('hidden')) return closeMenu();
+    renderAccountMenu();
+    menu.classList.remove('hidden');
+    button.setAttribute('aria-expanded', 'true');
+    menu.querySelector('button.active, button')?.focus();
+  });
+  menu.addEventListener('click', (e) => {
+    const pref = e.target.closest('[data-theme-pref]');
+    if (pref) window.amrTheme.set(pref.dataset.themePref);
+    if (e.target.closest('[data-action=logout]')) logOut();
+  });
+  document.addEventListener('click', (e) => { if (!e.target.closest('.menu-wrap')) closeMenu(); });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !menu.classList.contains('hidden')) {
+      closeMenu();
+      button.focus();
+    }
+  });
+}
+
+function setAccount(username) {
+  account = { username };
+  byId('accountName').textContent = username || 'Viewer';
+  byId('avatar').textContent = (username || 'V')[0];
 }
 
 async function logOut() {
@@ -155,6 +308,7 @@ async function logOut() {
 
 // The fleet is small, so search filters the full meter list in the browser.
 function initSearch() {
+  const box = byId('globalSearch');
   const input = byId('globalSearchInput');
   const results = byId('searchResults');
   let active = -1;
@@ -181,7 +335,7 @@ function initSearch() {
         .some((s) => s && String(s).toLowerCase().includes(term)));
       results.innerHTML = hits.length
         ? hits.slice(0, 8).map((m) => `<a href="#/meters/${encodeURIComponent(m.id)}" role="option">
-            <span><b>${esc(meterName(m))}</b><small>${esc([...meterIds(m), m.manufacturer].join(' · '))}</small></span>
+            <span><b>${esc(meterName(m))}</b><small>${esc([...meterIds(m), m.manufacturer].filter(Boolean).join(' · '))}</small></span>
             ${statusBadge(m.status)}</a>`).join('')
           + (hits.length > 8 ? `<a href="#/meters?search=${encodeURIComponent(input.value.trim())}"><span>Show all ${hits.length} matches</span></a>` : '')
         : '<div class="none">No meter matches this search.</div>';
@@ -197,7 +351,12 @@ function initSearch() {
   }, 200);
 
   input.addEventListener('input', lookup);
-  input.addEventListener('focus', () => { if (input.value.trim()) lookup(); });
+  // On phones the box is an icon that opens over the top bar.
+  input.addEventListener('focus', () => {
+    box.classList.add('open');
+    if (input.value.trim()) lookup();
+  });
+  input.addEventListener('blur', () => setTimeout(() => { if (!box.contains(document.activeElement)) box.classList.remove('open'); }, 150));
   input.addEventListener('keydown', (e) => {
     if (e.key === 'ArrowDown') { e.preventDefault(); highlight(active + 1); }
     else if (e.key === 'ArrowUp') { e.preventDefault(); highlight(active - 1); }
@@ -217,7 +376,16 @@ function initSearch() {
       input.value = '';
     }
   });
-  document.addEventListener('click', (e) => { if (!byId('globalSearch').contains(e.target)) hide(); });
+  document.addEventListener('click', (e) => { if (!box.contains(e.target)) hide(); });
+  // Ctrl+K (or "/" outside a text field) jumps to the search box.
+  document.addEventListener('keydown', (e) => {
+    const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName);
+    if (((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') || (e.key === '/' && !typing)) {
+      e.preventDefault();
+      input.focus();
+      input.select();
+    }
+  });
 }
 
 // Warns when refreshes have been failing for more than two intervals.
@@ -243,6 +411,9 @@ function startTicker() {
 
 async function initialize() {
   initNav();
+  initTips();
+  initTheme();
+  initAccountMenu();
   initSearch();
   startTicker();
   try {
@@ -251,13 +422,10 @@ async function initialize() {
     // The defaults above match the server defaults.
   }
   setTimeZone(settings.timezone);
-  const signing = { off: 'not checked (no MASTER_SECRET)', checked: 'checked, unsigned accepted', required: 'required' }[settings.signing];
-  byId('navFoot').innerHTML = `Online = message within ${esc(settings.onlineAfterMin)} min<br>
-    Offline after ${esc(settings.offlineAfterMin)} min<br>Signatures ${esc(signing || settings.signing)}<br>
-    Times in ${esc(zoneLabel())} (${esc(settings.timezone)})`;
+  byId('navFoot').textContent = `Times in ${zoneLabel()} · online within ${settings.onlineAfterMin} min`;
+  setAccount(null);
   if (settings.login) {
-    byId('logoutButton').classList.remove('hidden');
-    byId('logoutButton').addEventListener('click', logOut);
+    fetch('auth/me').then((r) => (r.ok ? r.json() : null)).then((me) => setAccount(me?.username || null)).catch(() => {});
   }
 
   document.addEventListener('visibilitychange', () => {
@@ -273,7 +441,8 @@ async function initialize() {
   window.addEventListener('hashchange', route);
   route();
 
-  // The meters badge in the sidebar needs the counts on every page.
+  // The sidebar counts come with the data of Home and Meters; a meter page
+  // fetches them once.
   if (parseRoute().name === 'meter') api('/api/fleet').then((f) => context.setAlertCount(f.counts)).catch(() => {});
 }
 

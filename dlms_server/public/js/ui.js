@@ -136,13 +136,79 @@ export function downloadCsv(filename, header, rows) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-// Chart.js colours from the CSS tokens, so charts follow light/dark mode.
+// Chart.js colours from the CSS tokens, so charts follow the theme.
 export function chartTheme() {
   const css = getComputedStyle(document.documentElement);
   const v = (name) => css.getPropertyValue(name).trim();
   return {
     text: v('--text'), muted: v('--muted'), grid: v('--line-soft'), accent: v('--accent'),
-    phases: [v('--phase-r'), v('--phase-y'), v('--phase-b')], ok: v('--ok'), bad: v('--bad'),
-    extra: ['#7c3aed', '#0e7490', '#b7791f', '#0f766e'],
+    phases: [v('--phase-r'), v('--phase-y'), v('--phase-b')], ok: v('--ok'), bad: v('--bad'), warn: v('--warn-line'),
+    extra: [v('--violet'), v('--teal'), v('--amber'), v('--sky'), v('--rose')],
+    surface: v('--surface'), line: v('--line'),
   };
+}
+
+// Chart.js (about 200 KB) is loaded the first time a page needs a chart.
+let chartLoad = null;
+export function ensureChart() {
+  if (window.Chart) return Promise.resolve(window.Chart);
+  chartLoad ||= new Promise((resolve) => {
+    const script = document.createElement('script');
+    script.src = 'vendor/chart.js';
+    script.onload = () => {
+      const C = window.Chart;
+      C.defaults.font.family = getComputedStyle(document.body).fontFamily;
+      C.defaults.font.size = 12;
+      C.defaults.plugins.tooltip.padding = 10;
+      C.defaults.plugins.tooltip.cornerRadius = 8;
+      C.defaults.plugins.tooltip.boxPadding = 4;
+      C.defaults.plugins.legend.labels.usePointStyle = true;
+      C.defaults.plugins.legend.labels.pointStyle = 'rectRounded';
+      resolve(C);
+    };
+    // Pages show "Chart library did not load" when window.Chart stays unset.
+    script.onerror = () => { chartLoad = null; resolve(null); };
+    document.head.append(script);
+  });
+  return chartLoad;
+}
+
+// Ask before a change that cannot be undone. Resolves true when confirmed.
+export function confirmDialog({ title, message, confirmLabel = 'Confirm', tone = 'danger' }) {
+  return new Promise((resolve) => {
+    const dialog = document.createElement('dialog');
+    dialog.className = 'confirm';
+    dialog.setAttribute('aria-labelledby', 'confirmTitle');
+    dialog.innerHTML = `<form method="dialog">
+      <div class="confirm-body"><span class="icon-tile ${tone === 'danger' ? 'c-bad' : 'c-indigo'}">${icon(tone === 'danger' ? 'warn' : 'info')}</span>
+        <div><h2 id="confirmTitle">${esc(title)}</h2><p>${esc(message)}</p></div></div>
+      <div class="confirm-actions"><button class="btn" value="cancel" autofocus>Cancel</button>
+        <button class="btn ${tone === 'danger' ? 'danger' : 'primary'}" value="ok">${esc(confirmLabel)}</button></div></form>`;
+    document.body.append(dialog);
+    let done = false;
+    const finish = (ok) => {
+      if (done) return;
+      done = true;
+      if (dialog.open) dialog.close();
+      dialog.remove();
+      resolve(ok);
+    };
+    dialog.querySelector('form').addEventListener('submit', (e) => {
+      e.preventDefault();
+      finish(e.submitter?.value === 'ok');
+    });
+    dialog.addEventListener('cancel', (e) => {   // Escape
+      e.preventDefault();
+      finish(false);
+    });
+    dialog.addEventListener('close', () => finish(false));
+    dialog.showModal();
+  });
+}
+
+// Breadcrumb from [label, href] pairs; the last one is the current page.
+export function crumbs(...items) {
+  return items.map(([label, href], i) => (i < items.length - 1 && href
+    ? `<a href="${href}">${esc(label)}</a><span class="sep" aria-hidden="true">${icon('chevron')}</span>`
+    : `<span aria-current="page">${esc(label)}</span>`)).join('');
 }

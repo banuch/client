@@ -70,12 +70,24 @@ then **Offline**. Problems with the meter itself (last read cycle failed, logs
 but no readings, no reading for a long time, unsigned data while signatures are
 checked) are listed as issues next to the status.
 
-- **Home:** device counts by status, failed meter reads, readings per hour
-  today, the devices that need attention (most urgent first) and status by
-  device firmware.
+- **Sidebar:** Home, and the Fleet group (all meters, offline, read failures,
+  unsigned data) with live counts. From 1280 px wide it can be collapsed to
+  icons (the choice is remembered), between 1024 and 1279 px it is always
+  icons, and below 1024 px it opens as a drawer from the menu button.
+- **Top bar:** breadcrumb, meter search (Ctrl+K or "/"), a connection pill
+  (live with the time of the last load, updating, or connection problem),
+  refresh, light/dark switch and the account menu (theme System / Light /
+  Dark, the server's status settings, log out).
+- **Home:** quick actions (offline meters, read failures, CSV export, all
+  meters); device counts by status; readings and failed reads today, each
+  with the change against yesterday until the same time of day; a chart of
+  reads and log uploads per hour today; fleet health; the devices that need
+  attention (most urgent first); the latest message of each device; status
+  by device firmware.
 - **Meters:** every device with status, last message, last read result, V
   R/Y/B, current, kW, kWh, firmware and issues; search, status filters,
-  sorting and paging. The search box at the top finds a meter from any page.
+  sorting, paging, links to each meter's trends and device log, and CSV
+  export of the meters shown.
 - **Meter page** (header with status and banners, then tabs):
   - *Instantaneous:* R/Y/B phase cards (V, A, PF, kW), frequency, kW / kvar /
     kVA, voltage and current unbalance.
@@ -110,9 +122,10 @@ Values of the latest reading are matched by OBIS code (`public/js/obis.js`,
 names as in `firmware/obis_names.h`) and shown with the unit the device sent.
 Server times are shown in `TIMEZONE`; profile times are the meter's own clock.
 The page refreshes every 30 s while visible (history tabs only when opened or
-changed) and warns when it has not refreshed for over a minute. It follows the
-system light/dark setting. Chart.js is served from `node_modules`, so the page
-loads nothing from other sites.
+changed) and warns when it has not refreshed for over a minute. The theme
+follows the system light/dark setting unless one is chosen in the account
+menu (kept in the browser). Chart.js is served from `node_modules` and loaded
+only on pages with charts, so the page loads nothing from other sites.
 
 ## Device protocol
 

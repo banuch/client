@@ -1,12 +1,15 @@
 // Meter list with status and the latest values. The fleet is small, so the
 // list is loaded whole and searched, filtered, sorted and paged in the browser.
-import { api } from '../api.js';
-import { num, meterNum, withUnit, average, present, meterName, meterIds } from '../format.js';
-import { esc, icon, statusBadge, timeCell, retBadge, signedBadge, pager, skeletonRows, emptyRow, errorBox, debounce, issueList } from '../ui.js';
+import { api, serverNow } from '../api.js';
+import { num, meterNum, withUnit, average, present, meterName, meterIds, dateTime, meterTimeText } from '../format.js';
+import {
+  esc, icon, statusBadge, timeCell, retBadge, signedBadge, pager, skeletonRows, emptyRow, errorBox, debounce, issueList,
+  crumbs, downloadCsv,
+} from '../ui.js';
 
 const REFRESH_MS = 30000;
 const PAGE_SIZE = 25;
-const COLUMNS = 10;
+const COLUMNS = 11;
 const STATUS_ORDER = { offline: 0, delayed: 1, online: 2 };
 const FILTERS = {
   online: (m) => m.status === 'online',
@@ -53,6 +56,21 @@ function currentText(m) {
 
 const valueText = (x, digits) => (x && present(x.num) ? withUnit(meterNum(x.num, digits), x.unit) : '—');
 
+/** Every given meter with its status and latest values, as a CSV download (opens in Excel). */
+export function downloadMetersCsv(meters) {
+  const val = (m, key) => (present(v(m, key)?.num) ? v(m, key).num : '');
+  downloadCsv(`meters-${meterTimeText(serverNow()).slice(0, 10)}.csv`,
+    ['name', 'imei', 'serial', 'manufacturer', 'status', 'last_message', 'last_read', 'read_result',
+      'voltage_r', 'voltage_y', 'voltage_b', 'voltage', 'current_avg', 'kw', 'kwh', 'firmware', 'signed', 'issues'],
+    meters.map((m) => [
+      m.name || '', m.id, m.serial || '', m.manufacturer || '', m.status, dateTime(m.lastSeen),
+      m.lastReadAt ? dateTime(m.lastReadAt) : '', m.lastReadAt ? (m.lastRet === 0 ? 'OK' : `Error ${m.lastRet}`) : '',
+      val(m, 'vR'), val(m, 'vY'), val(m, 'vB'), val(m, 'v'),
+      average([v(m, 'iR')?.num, v(m, 'iY')?.num, v(m, 'iB')?.num]) ?? val(m, 'i'),
+      val(m, 'kw'), val(m, 'kwh'), m.fw || '', m.verified ? 'yes' : 'no', m.issues.map((i) => i.text).join('; '),
+    ]));
+}
+
 export function createMetersView(route, context) {
   let root;
   let data = null;
@@ -89,7 +107,7 @@ export function createMetersView(route, context) {
     };
     root.querySelector('thead').innerHTML = `<tr>${th('meter')}${th('status')}${th('last')}<th>Last read</th>
       <th class="num">Voltage R/Y/B</th><th class="num p2">Current (avg)</th>${th('power', 'num')}${th('energy', 'num p2')}
-      ${th('fw', 'p3')}<th class="p3">Issues</th></tr>`;
+      ${th('fw', 'p3')}<th class="p3">Issues</th><th><span class="sr-only">Actions</span></th></tr>`;
   }
 
   function renderRows() {
@@ -103,7 +121,7 @@ export function createMetersView(route, context) {
       body.innerHTML = emptyRow(COLUMNS, 'No meters match these filters', 'Clear the search or choose another status.');
     } else {
       body.innerHTML = rows.slice((state.page - 1) * PAGE_SIZE, state.page * PAGE_SIZE).map((m) => `<tr class="${m.status === 'offline' ? 'stale' : ''}">
-        <td class="full"><a class="link" href="#/meters/${encodeURIComponent(m.id)}">${esc(meterName(m))}</a><span class="sub">${esc([...meterIds(m), m.manufacturer].join(' · ') || ' ')}</span></td>
+        <td class="full"><a class="link" href="#/meters/${encodeURIComponent(m.id)}">${esc(meterName(m))}</a><span class="sub">${esc([...meterIds(m), m.manufacturer].filter(Boolean).join(' · ') || ' ')}</span></td>
         <td data-l="Status">${statusBadge(m.status)}</td>
         <td data-l="Last message">${timeCell(m.lastSeen)}</td>
         <td data-l="Last read">${retBadge(m.lastReadAt ? m.lastRet : null)}</td>
@@ -113,10 +131,14 @@ export function createMetersView(route, context) {
         <td class="num val p2" data-l="Energy import">${esc(valueText(v(m, 'kwh'), 2))}</td>
         <td class="p3" data-l="Firmware"><span class="mono">${esc(m.fw || '—')}</span> ${signedBadge(m.verified)}</td>
         <td class="p3 wrap" data-l="Issues">${m.issues.length ? issueList(m.issues) : '<span class="muted">—</span>'}</td>
+        <td class="actions-cell"><span class="row-actions">
+          <a class="btn small icon-only ghost" href="#/meters/${encodeURIComponent(m.id)}/trends" data-tip="Trends" aria-label="Trends of ${esc(meterName(m))}">${icon('activity')}</a>
+          <a class="btn small icon-only ghost" href="#/meters/${encodeURIComponent(m.id)}/log" data-tip="Device log" aria-label="Device log of ${esc(meterName(m))}">${icon('file')}</a></span></td>
       </tr>`).join('');
     }
     root.querySelector('.pager').innerHTML = pager(state.page, PAGE_SIZE, rows.length, 'meters')
       .replace('</span>', ' · values of offline meters shown greyed</span>');
+    root.querySelector('#metersSub').textContent = `${data.counts.total} device${data.counts.total === 1 ? '' : 's'} · ${data.counts.online} online, ${data.counts.delayed} delayed, ${data.counts.offline} offline`;
   }
 
   function render() {
@@ -144,10 +166,14 @@ export function createMetersView(route, context) {
   return {
     mount(element) {
       root = element;
-      context.setCrumb('Meters');
-      root.innerHTML = `<section class="panel">
+      context.setCrumb(crumbs(['Home', '#/home'], ['Meters']));
+      root.innerHTML = `<div class="page-head">
+          <div><h1>Meters</h1><p id="metersSub"><span class="skeleton title"></span></p></div>
+          <div class="actions"><button class="btn" type="button" data-action="export" data-tip="Download the meters shown (all pages) as CSV">${icon('download')}<span class="label">Export CSV</span></button></div>
+        </div>
+        <section class="panel">
         <div class="toolbar">
-          <div class="grow"><input id="meterSearch" type="search" placeholder="Search name, IMEI, serial, manufacturer, firmware, IP" aria-label="Search meters"></div>
+          <div class="grow search-input">${icon('search')}<input id="meterSearch" type="search" placeholder="Search name, IMEI, serial, manufacturer, firmware, IP" aria-label="Search meters"></div>
           <div class="chips" id="statusChips" role="group" aria-label="Status filter"></div>
         </div>
         <div class="tscroll"><table class="cards"><thead></thead><tbody>${skeletonRows(COLUMNS)}</tbody></table></div>
@@ -161,8 +187,12 @@ export function createMetersView(route, context) {
         if (chip) {
           state.status = chip.dataset.status;
           state.page = 1;
+          // Keep the address (and the sidebar highlight) in step without reloading.
+          history.replaceState(null, '', `#/meters?status=${state.status}${state.search ? `&search=${encodeURIComponent(state.search)}` : ''}`);
+          context.syncNav();
           return render();
         }
+        if (e.target.closest('[data-action=export]') && data) return downloadMetersCsv(visible());
         const header = e.target.closest('th[data-sort]');
         if (header) return sortBy(header.dataset.sort);
         const page = e.target.closest('[data-page]');

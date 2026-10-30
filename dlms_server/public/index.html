@@ -5,16 +5,18 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="AMR meter data: readings, profiles and device logs from the ESP32 meter readers">
   <title>AMR Data</title>
+  <script src="js/theme.js"></script>
   <link rel="stylesheet" href="css/app.css">
 </head>
 <body>
+  <a class="skip" href="#view">Skip to content</a>
   <svg width="0" height="0" class="icon-sprite" aria-hidden="true">
     <symbol id="i-ok" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/></symbol>
     <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
     <symbol id="i-x" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m9 9 6 6m0-6-6 6"/></symbol>
     <symbol id="i-warn" viewBox="0 0 24 24"><path d="M12 3 2 20h20L12 3z"/><path d="M12 10v4m0 3v.01"/></symbol>
     <symbol id="i-minus" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8 12h8"/></symbol>
-    <symbol id="i-grid" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></symbol>
+    <symbol id="i-grid" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></symbol>
     <symbol id="i-meter" viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 7h8v4H8zM8 15h2m4 0h2"/></symbol>
     <symbol id="i-inbox" viewBox="0 0 24 24"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5 5h14l3 7v7H2v-7z"/></symbol>
     <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></symbol>
@@ -24,31 +26,64 @@
     <symbol id="i-menu" viewBox="0 0 24 24"><path d="M3 6h18M3 12h18M3 18h18"/></symbol>
     <symbol id="i-edit" viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16v4zM13 7l4 4"/></symbol>
     <symbol id="i-logout" viewBox="0 0 24 24"><path d="M14 4h5v16h-5M10 8l-4 4 4 4M6 12h10"/></symbol>
+    <symbol id="i-collapse" viewBox="0 0 24 24"><path d="m11 17-5-5 5-5M18 17l-5-5 5-5"/></symbol>
+    <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></symbol>
+    <symbol id="i-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+    <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4.9 4.9l1.4 1.4m11.4 11.4 1.4 1.4M2 12h2m16 0h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></symbol>
+    <symbol id="i-moon" viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></symbol>
+    <symbol id="i-monitor" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></symbol>
+    <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v5m0-8v.01"/></symbol>
+    <symbol id="i-activity" viewBox="0 0 24 24"><path d="M3 12h4l3-8 4 16 3-8h4"/></symbol>
+    <symbol id="i-file" viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h6"/></symbol>
+    <symbol id="i-up" viewBox="0 0 24 24"><path d="M7 17 17 7M9 7h8v8"/></symbol>
+    <symbol id="i-dn" viewBox="0 0 24 24"><path d="M7 7l10 10M17 9v8H9"/></symbol>
+    <symbol id="i-bolt" viewBox="0 0 24 24"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></symbol>
+    <symbol id="i-chip" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/><path d="M10 10h4v4h-4zM9 2v4m6-4v4M9 18v4m6-4v4M2 9h4m-4 6h4m12-6h4m-4 6h4"/></symbol>
+    <symbol id="i-open" viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></symbol>
   </svg>
 
   <div class="shell" id="shell">
-    <aside class="sidebar" id="sidebar">
-      <div class="brand"><b aria-hidden="true">AMR</b><div><strong>AMR Data</strong><small>Meter readings &amp; device logs</small></div></div>
+    <aside class="sidebar" id="sidebar" aria-label="Sidebar">
+      <a class="brand" href="#/home" aria-label="AMR Data home"><span class="logo" aria-hidden="true">AMR</span><span class="brand-text"><strong>AMR Data</strong><small>Meter readings &amp; device logs</small></span></a>
       <nav class="nav" aria-label="Main">
-        <a href="#/home" data-nav="home"><svg class="i" aria-hidden="true"><use href="#i-grid"/></svg>Home</a>
-        <a href="#/meters" data-nav="meters"><svg class="i" aria-hidden="true"><use href="#i-meter"/></svg>Meters <span id="navAlert" class="count hidden" title="Meters offline or with a failed meter read"></span></a>
+        <div class="nav-group">
+          <div class="nav-title">Overview</div>
+          <a href="#/home" data-nav="home" data-tip="Home"><svg class="i" aria-hidden="true"><use href="#i-grid"/></svg><span class="nav-label">Home</span></a>
+        </div>
+        <div class="nav-group">
+          <div class="nav-title">Fleet</div>
+          <a href="#/meters?status=" data-nav="meters" data-tip="All meters"><svg class="i" aria-hidden="true"><use href="#i-meter"/></svg><span class="nav-label">All meters</span><span class="count hidden" data-count="total"></span></a>
+          <a href="#/meters?status=offline" data-nav="meters:offline" data-tip="Offline"><svg class="i" aria-hidden="true"><use href="#i-x"/></svg><span class="nav-label">Offline</span><span class="count hidden" data-count="offline"></span></a>
+          <a href="#/meters?status=failed" data-nav="meters:failed" data-tip="Read failures"><svg class="i" aria-hidden="true"><use href="#i-warn"/></svg><span class="nav-label">Read failures</span><span class="count hidden" data-count="readFailed"></span></a>
+          <a href="#/meters?status=unsigned" data-nav="meters:unsigned" data-tip="Unsigned data"><svg class="i" aria-hidden="true"><use href="#i-lock"/></svg><span class="nav-label">Unsigned data</span><span class="count hidden" data-count="unsigned"></span></a>
+        </div>
       </nav>
-      <div class="nav-foot" id="navFoot"></div>
+      <div class="side-foot">
+        <div class="side-info" id="navFoot"></div>
+        <button class="side-btn" id="collapseButton" type="button" data-tip="Expand sidebar" aria-label="Collapse sidebar" aria-pressed="false"><svg class="i" aria-hidden="true"><use href="#i-collapse"/></svg><span class="side-label">Collapse</span></button>
+      </div>
     </aside>
     <div class="scrim" id="scrim"></div>
 
     <div class="main">
       <header class="topbar">
-        <button class="btn icon-only menu-btn" id="menuButton" type="button" aria-label="Open menu" aria-controls="sidebar" aria-expanded="false"><svg class="i" aria-hidden="true"><use href="#i-menu"/></svg></button>
-        <div class="crumb" id="crumb">Home</div>
+        <button class="btn icon-only ghost menu-btn" id="menuButton" type="button" aria-label="Open menu" aria-controls="sidebar" aria-expanded="false"><svg class="i" aria-hidden="true"><use href="#i-menu"/></svg></button>
+        <nav class="crumb" id="crumb" aria-label="Breadcrumb">Home</nav>
         <div class="global-search" id="globalSearch">
           <svg class="i" aria-hidden="true"><use href="#i-search"/></svg>
-          <input id="globalSearchInput" type="search" autocomplete="off" placeholder="Find meter: name, IMEI, serial, manufacturer" aria-label="Find meter" aria-controls="searchResults" aria-expanded="false">
+          <input id="globalSearchInput" type="search" autocomplete="off" placeholder="Find meter: name, IMEI, serial…" aria-label="Find meter" aria-controls="searchResults" aria-expanded="false">
+          <kbd>Ctrl K</kbd>
           <div id="searchResults" class="search-results hidden" role="listbox"></div>
         </div>
-        <div class="updated" id="updated" role="status" aria-live="polite"></div>
-        <button class="btn" id="refreshButton" type="button" title="Reload this page's data"><svg class="i" aria-hidden="true"><use href="#i-refresh"/></svg><span class="label">Refresh</span></button>
-        <button class="btn hidden" id="logoutButton" type="button" title="Sign out of this page"><svg class="i" aria-hidden="true"><use href="#i-logout"/></svg><span class="label">Log out</span></button>
+        <div class="top-actions">
+          <div class="conn" id="updated" role="status" aria-live="polite"></div>
+          <button class="btn icon-only" id="refreshButton" type="button" data-tip="Reload this page's data" aria-label="Refresh"><svg class="i" aria-hidden="true"><use href="#i-refresh"/></svg></button>
+          <button class="btn icon-only" id="themeButton" type="button" data-tip="Switch light / dark" aria-label="Switch light or dark theme"><svg class="i" aria-hidden="true"><use href="#i-moon"/></svg></button>
+          <div class="menu-wrap">
+            <button class="account-btn" id="accountButton" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="accountMenu"><span class="avatar" id="avatar" aria-hidden="true">·</span><span class="name" id="accountName">Viewer</span><svg class="i" aria-hidden="true"><use href="#i-down"/></svg></button>
+            <div class="menu hidden" id="accountMenu" aria-label="Account"></div>
+          </div>
+        </div>
       </header>
 
       <div class="outdated hidden" id="outdated" role="alert"></div>
@@ -58,7 +93,6 @@
 
   <div class="toasts" id="toasts" aria-live="polite"></div>
 
-  <script src="vendor/chart.js"></script>
   <script type="module" src="js/main.js"></script>
 </body>
 </html>
