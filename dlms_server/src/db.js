@@ -31,7 +31,8 @@ CREATE TABLE IF NOT EXISTS devices (
   last_ip     TEXT,
   fw          TEXT,
   verified    INTEGER NOT NULL DEFAULT 0,   -- last message was signed and checked
-  last_reading_id INTEGER
+  last_reading_id INTEGER,
+  name        TEXT                          -- set on the page; device messages never change it
 );
 CREATE TABLE IF NOT EXISTS readings (
   id          INTEGER PRIMARY KEY,
@@ -128,9 +129,19 @@ function rowKey(row) {
  *      under its changing time. Of those copies (time within OPEN_ROW_S of the
  *      meter clock of the reading that stored them) the newest per device
  *      becomes the "open" row, the rest are deleted.
+ *   2: devices.name (databases made before it).
  */
 function migrate(db) {
-  if (db.pragma('user_version', { simple: true }) >= 1) return;
+  const version = db.pragma('user_version', { simple: true });
+  if (version < 1) migrateOpenRows(db);
+  if (version < 2) {
+    const cols = db.prepare('PRAGMA table_info(devices)').all().map((c) => c.name);
+    if (!cols.includes('name')) db.exec('ALTER TABLE devices ADD COLUMN name TEXT');
+    db.pragma('user_version = 2');
+  }
+}
+
+function migrateOpenRows(db) {
   const rows = db.prepare(`
     SELECT r.id, r.device_id AS deviceId, r.t, v.text AS clock
     FROM profile_rows r JOIN reading_values v ON v.reading_id = r.reading_id AND v.obis = ?
@@ -239,12 +250,13 @@ function openDb(file) {
 
   // ── Queries for the REST API ─────────────────────────────────────────────
   const listDevicesStmt = db.prepare(`
-    SELECT d.id, d.first_seen AS firstSeen, d.last_seen AS lastSeen, d.last_ip AS lastIp, d.fw,
+    SELECT d.id, d.name, d.first_seen AS firstSeen, d.last_seen AS lastSeen, d.last_ip AS lastIp, d.fw,
            d.verified, r.read_at AS lastReadAt, r.ret AS lastRet, r.value_count AS lastValueCount,
            (SELECT MAX(received_at) FROM log_uploads l WHERE l.device_id = d.id) AS lastLogAt
     FROM devices d LEFT JOIN readings r ON r.id = d.last_reading_id
     ORDER BY d.last_seen DESC`);
   const deviceStmt = db.prepare('SELECT id, last_reading_id AS lastReadingId FROM devices WHERE id = ?');
+  const setNameStmt = db.prepare('UPDATE devices SET name = ? WHERE id = ?');
   const readingStmt = db.prepare(`
     SELECT id, device_id AS deviceId, boot, seq, received_at AS receivedAt, read_at AS readAt, ret, fw,
            verified, value_count AS valueCount
@@ -301,7 +313,7 @@ function openDb(file) {
   const logHoursStmt = db.prepare(`
     SELECT CAST((received_at - @from) / 3600000 AS INTEGER) AS h, COUNT(*) AS n
     FROM log_uploads WHERE received_at >= @from AND received_at < @to GROUP BY h`);
-  const lastMessageStmt = db.prepare('SELECT id, last_seen AS at FROM devices ORDER BY last_seen DESC LIMIT 1');
+  const lastMessageStmt = db.prepare('SELECT id, name, last_seen AS at FROM devices ORDER BY last_seen DESC LIMIT 1');
   const readingDaysStmt = db.prepare(`
     SELECT CAST((read_at - @from) / 86400000 AS INTEGER) AS d, COUNT(*) AS n, SUM(ret != 0) AS failed, COUNT(DISTINCT boot) AS boots
     FROM readings WHERE device_id = @deviceId AND read_at >= @from GROUP BY d`);
@@ -371,6 +383,7 @@ function openDb(file) {
     touchDevice,
     listDevices: () => listDevicesStmt.all(),
     hasDevice: (id) => !!deviceStmt.get(id),
+    setName: (id, name) => setNameStmt.run(name, id).changes === 1,
     latestReading,
     readings: (p) => readingsStmt.all(p),
     history: (p) => historyStmt.all(p),

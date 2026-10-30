@@ -95,6 +95,17 @@ checked) are listed as issues next to the status.
   - *All values, Read cycles, Device log:* the raw values of the last cycle,
     every read cycle, and the serial log of one day (last 256 KB).
 
+### Device names
+
+Each device can be given a name (up to 64 characters) with the ✎ button next to
+its title on the meter page; saving an empty name clears it. Pages show the name,
+else the meter serial, else the IMEI, with the other identifiers below it. The
+search boxes match names too, the Meter info tab lists the name, and CSV
+downloads start with it. Names are kept in the `devices` table, which device
+messages never change. Two devices may share a name; the meter page then warns
+about it. Scripts can set a name with
+`curl -u admin:<VIEW_PASSWORD> -X PUT -H 'X-AMR-Data: 1' -H 'Content-Type: application/json' -d '{"name":"Feeder B"}' http://<host>:7002/api/devices/<IMEI>/name`.
+
 Values of the latest reading are matched by OBIS code (`public/js/obis.js`,
 names as in `firmware/obis_names.h`) and shown with the unit the device sent.
 Server times are shown in `TIMEZONE`; profile times are the meter's own clock.

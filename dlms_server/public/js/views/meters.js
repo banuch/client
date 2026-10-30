@@ -1,7 +1,7 @@
 // Meter list with status and the latest values. The fleet is small, so the
 // list is loaded whole and searched, filtered, sorted and paged in the browser.
 import { api } from '../api.js';
-import { num, meterNum, withUnit, average, present } from '../format.js';
+import { num, meterNum, withUnit, average, present, meterName, meterIds } from '../format.js';
 import { esc, icon, statusBadge, timeCell, retBadge, signedBadge, pager, skeletonRows, emptyRow, errorBox, debounce, issueList } from '../ui.js';
 
 const REFRESH_MS = 30000;
@@ -16,7 +16,7 @@ const FILTERS = {
   unsigned: (m) => m.issues.some((i) => i.code === 'unsigned'),
 };
 const SORTS = {
-  meter: { label: 'Meter', first: 'asc', key: (m) => (m.serial || m.id).toLowerCase() },
+  meter: { label: 'Meter', first: 'asc', key: (m) => meterName(m).toLowerCase() },
   status: { label: 'Status', first: 'asc', key: (m) => STATUS_ORDER[m.status] * 10 + (m.issues.length ? 0 : 1) },
   last: { label: 'Last message', first: 'desc', key: (m) => m.lastSeen },
   power: { label: 'Active power', first: 'desc', key: (m) => m.values.kw?.num ?? -Infinity },
@@ -61,7 +61,7 @@ export function createMetersView(route, context) {
   function visible() {
     const term = state.search.toLowerCase();
     let rows = data.meters;
-    if (term) rows = rows.filter((m) => [m.id, m.serial, m.manufacturer, m.fw, m.lastIp].some((s) => s && String(s).toLowerCase().includes(term)));
+    if (term) rows = rows.filter((m) => [m.name, m.id, m.serial, m.manufacturer, m.fw, m.lastIp].some((s) => s && String(s).toLowerCase().includes(term)));
     if (state.status) rows = rows.filter(FILTERS[state.status]);
     const { key } = SORTS[state.sort];
     const dir = state.dir === 'asc' ? 1 : -1;
@@ -103,7 +103,7 @@ export function createMetersView(route, context) {
       body.innerHTML = emptyRow(COLUMNS, 'No meters match these filters', 'Clear the search or choose another status.');
     } else {
       body.innerHTML = rows.slice((state.page - 1) * PAGE_SIZE, state.page * PAGE_SIZE).map((m) => `<tr class="${m.status === 'offline' ? 'stale' : ''}">
-        <td class="full"><a class="link" href="#/meters/${encodeURIComponent(m.id)}">${esc(m.serial || m.id)}</a><span class="sub">${esc([m.serial ? m.id : null, m.manufacturer].filter(Boolean).join(' · ') || ' ')}</span></td>
+        <td class="full"><a class="link" href="#/meters/${encodeURIComponent(m.id)}">${esc(meterName(m))}</a><span class="sub">${esc([...meterIds(m), m.manufacturer].join(' · ') || ' ')}</span></td>
         <td data-l="Status">${statusBadge(m.status)}</td>
         <td data-l="Last message">${timeCell(m.lastSeen)}</td>
         <td data-l="Last read">${retBadge(m.lastReadAt ? m.lastRet : null)}</td>
@@ -147,7 +147,7 @@ export function createMetersView(route, context) {
       context.setCrumb('Meters');
       root.innerHTML = `<section class="panel">
         <div class="toolbar">
-          <div class="grow"><input id="meterSearch" type="search" placeholder="Search IMEI, serial, manufacturer, firmware, IP" aria-label="Search meters"></div>
+          <div class="grow"><input id="meterSearch" type="search" placeholder="Search name, IMEI, serial, manufacturer, firmware, IP" aria-label="Search meters"></div>
           <div class="chips" id="statusChips" role="group" aria-label="Status filter"></div>
         </div>
         <div class="tscroll"><table class="cards"><thead></thead><tbody>${skeletonRows(COLUMNS)}</tbody></table></div>

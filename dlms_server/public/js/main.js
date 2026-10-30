@@ -1,7 +1,7 @@
 // Application shell: hash router, one refresh timer for the visible view,
 // meter search, "updated" indicator and the outdated-data banner.
 import { api, isAbort } from './api.js';
-import { setTimeZone, zoneLabel, clockTime, ago, durationText } from './format.js';
+import { setTimeZone, zoneLabel, clockTime, ago, durationText, meterName, meterIds } from './format.js';
 import { byId, esc, icon, toast, debounce, statusBadge } from './ui.js';
 import { createHomeView } from './views/home.js';
 import { createMetersView } from './views/meters.js';
@@ -174,11 +174,11 @@ function initSearch() {
     if (!term) return hide();
     try {
       if (!cache || Date.now() - cache.at > 30000) cache = { at: Date.now(), meters: (await api('/api/meters')).meters };
-      const hits = cache.meters.filter((m) => [m.id, m.serial, m.manufacturer, m.fw, m.lastIp]
+      const hits = cache.meters.filter((m) => [m.name, m.id, m.serial, m.manufacturer, m.fw, m.lastIp]
         .some((s) => s && String(s).toLowerCase().includes(term)));
       results.innerHTML = hits.length
         ? hits.slice(0, 8).map((m) => `<a href="#/meters/${encodeURIComponent(m.id)}" role="option">
-            <span><b>${esc(m.serial || m.id)}</b><small>${esc([m.id, m.manufacturer].filter(Boolean).join(' · '))}</small></span>
+            <span><b>${esc(meterName(m))}</b><small>${esc([...meterIds(m), m.manufacturer].join(' · '))}</small></span>
             ${statusBadge(m.status)}</a>`).join('')
           + (hits.length > 8 ? `<a href="#/meters?search=${encodeURIComponent(input.value.trim())}"><span>Show all ${hits.length} matches</span></a>` : '')
         : '<div class="none">No meter matches this search.</div>';

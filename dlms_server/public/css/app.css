@@ -292,6 +292,9 @@ td.num.total { font-weight: 700; }
 .mhead { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 28px; padding: 14px 16px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); }
 .mhead h1 { margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; font-size: 20px; }
 .mhead .ids { margin-top: 3px; font-size: 12px; color: var(--muted); }
+.mhead h1 .btn.icon-only { width: 28px; color: var(--muted); }
+.rename { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.rename input { width: min(320px, 70vw); font-size: 15px; font-weight: 400; }
 .facts { display: flex; flex-wrap: wrap; gap: 8px 26px; }
 .fact small { display: block; font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
 .fact b { font-size: 13px; font-variant-numeric: tabular-nums; }

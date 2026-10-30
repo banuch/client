@@ -72,6 +72,7 @@ function buildMeters(devices, values, now, cfg) {
     const vals = byDevice.get(d.id) || {};
     const m = {
       id: d.id,
+      name: d.name ?? null,
       serial: vals.serial?.text ?? (vals.serial?.num != null ? String(vals.serial.num) : null),
       manufacturer: vals.manufacturer?.text ?? null,
       status: meterStatus(d.lastSeen, now, cfg),
