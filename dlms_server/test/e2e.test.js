@@ -333,7 +333,7 @@ test('sign-in page: session cookie, log out, no browser login popup', async () =
     assert.strictEqual(page.status, 302);
     assert.strictEqual(page.headers.get('location'), '/login.html');
     assert.strictEqual((await fetch(url('/login.html'))).status, 200);
-    for (const file of ['/js/login.js', '/css/login.css', '/css/app.css']) {
+    for (const file of ['/js/login.js', '/js/theme.js', '/css/login.css', '/css/app.css']) {
       assert.strictEqual((await fetch(url(file))).status, 200, `${file} loads before sign-in`);
     }
     const api = await fetch(url('/api/meters'));
@@ -500,6 +500,13 @@ test('overview endpoints: config, meters, fleet, stats, chart library', async ()
     assert.strictEqual(fleet.body.readingsToday, 2);
     assert.deepStrictEqual(fleet.body.attention.map((a) => a.id), [IMEI]);
     assert.deepStrictEqual(fleet.body.byFirmware, [{ fw: '2.0.6', online: 0, delayed: 1, offline: 0, total: 1 }]);
+    assert.deepStrictEqual(fleet.body.yesterday, { readings: 0, failed: 0, logs: 0 });
+    // A day later "yesterday" counts up to the same time of day only.
+    now += 24 * 3600 * 1000;
+    assert.deepStrictEqual((await get(s, '/api/fleet')).body.yesterday, { readings: 2, failed: 1, logs: 1 });
+    now -= 90 * 60000;   // 11:15 IST: before yesterday's messages
+    assert.deepStrictEqual((await get(s, '/api/fleet')).body.yesterday, { readings: 0, failed: 0, logs: 0 });
+    now -= 24 * 3600 * 1000 - 90 * 60000;
 
     const stats = await get(s, `/api/devices/${IMEI}/stats?days=3`);
     assert.strictEqual(stats.body.perDay.length, 3);

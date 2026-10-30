@@ -3,7 +3,7 @@
 // only when opened, filtered, or refreshed by hand.
 import { api, devicePath, isAbort } from '../api.js';
 import { dateTime, meterName } from '../format.js';
-import { esc, icon, statusBadge, agoText, stateBox, errorBox, signedBadge, retBadge, toast } from '../ui.js';
+import { esc, icon, statusBadge, agoText, stateBox, errorBox, signedBadge, retBadge, toast, crumbs, confirmDialog, ensureChart } from '../ui.js';
 import { O, valueMap, textOf } from '../obis.js';
 import { renderInstant, renderEnergy, renderInfo, renderComm, createValuesTab } from './meter-live.js';
 import { createTrendsTab, createProfilesTab, createBillingTab, createEventsTab, createReadingsTab, createLogTab } from './meter-history.js';
@@ -42,28 +42,55 @@ export function createMeterView(route, context) {
   const pane = () => root.querySelector('#meterPane');
 
   function renderTabs() {
-    root.querySelector('.tabs').innerHTML = TABS.map(([key, label]) => `<a class="tab${key === tab ? ' active' : ''}" href="${href(key)}" role="tab" aria-selected="${key === tab}">${label}</a>`).join('');
+    root.querySelector('.tabs').innerHTML = TABS.map(([key, label]) => `<a class="tab${key === tab ? ' active' : ''}" href="${href(key)}" role="tab"
+      aria-selected="${key === tab}" aria-controls="meterPane" tabindex="${key === tab ? 0 : -1}">${label}</a>`).join('');
+    root.querySelector('.tab.active')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   }
 
   function renderName() {
     const title = root.querySelector('#meterTitle');
     if (renaming) {
-      title.innerHTML = `<form class="rename" id="renameForm">
-        <input type="text" id="nameInput" maxlength="64" value="${esc(meter.name || '')}" placeholder="${esc(meter.serial || meter.id)}" aria-label="Device name">
-        <button class="btn small" type="submit">Save</button>
-        <button class="btn small" type="button" data-action="rename-cancel">Cancel</button></form>`;
+      title.innerHTML = `<form class="rename" id="renameForm" novalidate>
+        <input type="text" id="nameInput" maxlength="64" value="${esc(meter.name || '')}" placeholder="e.g. Substation 3 – Feeder B" aria-label="Device name" aria-describedby="nameHint">
+        <button class="btn small primary" type="submit">Save</button>
+        <button class="btn small" type="button" data-action="rename-cancel">Cancel</button>
+        <span class="hint" id="nameHint" aria-live="polite"></span></form>`;
+      checkName(title.querySelector('#nameInput'));
       const input = title.querySelector('#nameInput');
       input.focus();
       input.select();
       return;
     }
     title.innerHTML = `${esc(meterName(meter))}
-      <button class="btn small icon-only" type="button" data-action="rename" title="Rename device" aria-label="Rename device">${icon('edit')}</button>
+      <button class="btn small icon-only ghost" type="button" data-action="rename" data-tip="Rename device" aria-label="Rename device">${icon('edit')}</button>
       ${statusBadge(meter.status)} ${signedBadge(meter.verified)}`;
+  }
+
+  // The same rules as the server (src/http-server.js parseName), shown while typing.
+  function checkName(input) {
+    const value = input.value.trim();
+    const hint = root.querySelector('#nameHint');
+    const length = [...value].length;
+    // eslint-disable-next-line no-control-regex
+    const error = /[\u0000-\u001f\u007f-\u009f]/.test(value) ? 'Names cannot contain control characters.'
+      : length > 64 ? 'Names can have up to 64 characters.' : '';
+    input.setAttribute('aria-invalid', String(Boolean(error)));
+    hint.classList.toggle('error', Boolean(error));
+    hint.textContent = error || (value ? `${length}/64 characters` : meter.name ? 'Saving an empty name clears it; the page then shows the serial or IMEI.' : 'Up to 64 characters.');
+    root.querySelector('#renameForm [type=submit]').disabled = Boolean(error) || value === (meter.name || '');
+    return !error;
   }
 
   async function saveName(value) {
     const button = root.querySelector('#renameForm [type=submit]');
+    if (!value.trim() && meter.name) {
+      const ok = await confirmDialog({
+        title: 'Clear the device name?',
+        message: `"${meter.name}" will be removed. The page then shows this device by its ${meter.serial ? 'serial' : 'IMEI'}.`,
+        confirmLabel: 'Clear name',
+      });
+      if (!ok || !root.querySelector('#renameForm')) return;
+    }
     button.disabled = true;
     try {
       const saved = await api(devicePath(id, '/name'), { method: 'PUT', body: { name: value } });
@@ -79,7 +106,7 @@ export function createMeterView(route, context) {
   function renderHeader() {
     const values = valueMap(latest?.values);
     const name = meterName(meter);
-    context.setCrumb(`<a href="#/meters">Meters</a> <span>/ ${esc(name)}</span>`);
+    context.setCrumb(crumbs(['Meters', '#/meters'], [name]));
     document.title = `${name} · AMR Data`;
     const ids = [
       meter.name && meter.serial ? `Serial ${meter.serial}` : null,
@@ -92,7 +119,7 @@ export function createMeterView(route, context) {
     const focused = keep && keep.contains(document.activeElement) ? document.activeElement : null;
     if (keep) keep.remove();
     root.querySelector('#meterHead').innerHTML = `
-      <div><h1 id="meterTitle"></h1><div class="ids">${esc(ids.join(' · '))}</div></div>
+      <div><span class="icon-tile c-indigo" aria-hidden="true">${icon('meter')}</span><div><h1 id="meterTitle"></h1><div class="ids">${esc(ids.join(' · '))}</div></div></div>
       <div class="facts">
         <div class="fact"><small>Last message</small><b>${esc(dateTime(meter.lastSeen))} · ${agoText(meter.lastSeen)}</b></div>
         <div class="fact"><small>Last meter read</small><b>${meter.lastReadAt ? `${esc(dateTime(meter.lastReadAt))} · ${agoText(meter.lastReadAt)}` : 'None'}</b></div>
@@ -165,14 +192,14 @@ export function createMeterView(route, context) {
     root.innerHTML = `<div class="mhead" id="meterHead"><span class="skeleton title"></span></div>
       <div id="meterBanner"></div>
       <nav class="tabs" role="tablist" aria-label="Meter sections"></nav>
-      <div id="meterPane"><span class="skeleton block"></span></div>`;
+      <div id="meterPane" role="tabpanel" aria-label="Meter section"><span class="skeleton block"></span></div>`;
     renderTabs();
   }
 
   return {
     mount(element) {
       root = element;
-      context.setCrumb(`<a href="#/meters">Meters</a> <span>/ ${esc(id)}</span>`);
+      context.setCrumb(crumbs(['Meters', '#/meters'], [id]));
       layout();
       root.addEventListener('click', (e) => {
         if (e.target.closest('#meterPane > .state [data-action=retry], #meterRetry')) context.reload('manual');
@@ -186,22 +213,37 @@ export function createMeterView(route, context) {
       });
       root.addEventListener('keydown', (e) => {
         if (e.key === 'Escape' && e.target.id === 'nameInput') { renaming = false; renderName(); }
+        // Arrow keys, Home and End move between the tabs.
+        const current = e.target.closest('.tab');
+        const moves = { ArrowRight: 1, ArrowLeft: -1, Home: -TABS.length, End: TABS.length };
+        if (current && e.key in moves) {
+          e.preventDefault();
+          const keys = TABS.map(([key]) => key);
+          const i = Math.max(0, Math.min(keys.length - 1, keys.indexOf(tab) + moves[e.key]));
+          location.hash = href(keys[i]);
+        }
       });
+      root.addEventListener('input', (e) => { if (e.target.id === 'nameInput') checkName(e.target); });
     },
     update(next) {
       if (next.id !== id) return false;
       const nextTab = validTab(next.tab);
       if (nextTab !== tab) {
         tab = nextTab;
+        // Keyboard users keep focus on the tab bar (arrow keys move between tabs).
+        const tabFocused = root.querySelector('.tabs').contains(document.activeElement);
         renderTabs();
+        if (tabFocused) root.querySelector('.tab.active').focus();
         if (LIVE_TABS[tab]) pane().innerHTML = '<span class="skeleton block"></span>';
       }
       return true;
     },
     async load(signal, reason) {
+      // Chart.js loads alongside the data; the charted tabs need it.
       const [list, reading] = await Promise.all([
         api('/api/meters', { signal }),
         api(devicePath(id, '/latest'), { signal }),
+        ensureChart(),
       ]);
       meters = list.meters;
       meter = meters.find((m) => m.id === id);

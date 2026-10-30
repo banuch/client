@@ -4,7 +4,7 @@
 //
 //    GET /api/health                                   no login
 //    GET /api/config                                   status thresholds, time zone, server time
-//    GET /api/fleet                                    status counts, activity today, needs attention
+//    GET /api/fleet                                    status counts, activity today (and yesterday until now), needs attention
 //    GET /api/meters                                   every device with status, issues, key values
 //    GET /api/devices                                  all devices, newest first
 //    GET /api/devices/:id/stats?days=7                 message counts (per day) and log totals
@@ -46,7 +46,7 @@ const SESSION_COOKIE = 'amr_sid';
 const CSRF_HEADER = 'x-amr-data';   // login/logout POSTs must carry "X-AMR-Data: 1"
 const MAX_SESSIONS = 1000;
 // Served without a session so the sign-in page can load.
-const LOGIN_FILES = new Set(['/login.html', '/css/app.css', '/css/login.css', '/js/login.js']);
+const LOGIN_FILES = new Set(['/login.html', '/css/app.css', '/css/login.css', '/js/login.js', '/js/theme.js']);
 
 /** A profile row time bound, null if absent, undefined if malformed. A bare date as "to" includes that day. */
 function parseRowTime(v, isTo) {
@@ -241,6 +241,10 @@ function createHttpApp(cfg, { db, logs }) {
     res.json({ now, counts: countStatuses(meters), meters });
   });
 
+  const totals = (hours) => hours.reduce((t, h) => ({
+    readings: t.readings + h.readings, failed: t.failed + h.failed, logs: t.logs + h.logs,
+  }), { readings: 0, failed: 0, logs: 0 });
+
   api.get('/fleet', (req, res) => {
     const now = cfg.clock();
     const meters = meterList(now);
@@ -254,6 +258,8 @@ function createHttpApp(cfg, { db, logs }) {
       readingsToday: hours.reduce((n, h) => n + h.readings, 0),
       failedToday: hours.reduce((n, h) => n + h.failed, 0),
       logsToday: hours.reduce((n, h) => n + h.logs, 0),
+      // Yesterday from midnight up to the same time of day, for the change shown on Home.
+      yesterday: totals(db.activity(from - 24 * 3600 * 1000, now - 24 * 3600 * 1000)),
       lastMessage: db.lastMessage(),
       attention: attention(meters),
       byFirmware: byFirmware(meters),
