@@ -2,8 +2,8 @@
 // live tabs refresh on the timer; history tabs keep their filters and reload
 // only when opened, filtered, or refreshed by hand.
 import { api, devicePath, isAbort } from '../api.js';
-import { dateTime } from '../format.js';
-import { esc, icon, statusBadge, agoText, stateBox, errorBox, signedBadge, retBadge } from '../ui.js';
+import { dateTime, meterName } from '../format.js';
+import { esc, icon, statusBadge, agoText, stateBox, errorBox, signedBadge, retBadge, toast } from '../ui.js';
 import { O, valueMap, textOf } from '../obis.js';
 import { renderInstant, renderEnergy, renderInfo, renderComm, createValuesTab } from './meter-live.js';
 import { createTrendsTab, createProfilesTab, createBillingTab, createEventsTab, createReadingsTab, createLogTab } from './meter-history.js';
@@ -32,7 +32,9 @@ export function createMeterView(route, context) {
   let tab = validTab(route.tab);
   let root;
   let meter = null;
+  let meters = [];
   let latest = null;
+  let renaming = false;
   let history = null;
   let historyName = null;
 
@@ -43,21 +45,64 @@ export function createMeterView(route, context) {
     root.querySelector('.tabs').innerHTML = TABS.map(([key, label]) => `<a class="tab${key === tab ? ' active' : ''}" href="${href(key)}" role="tab" aria-selected="${key === tab}">${label}</a>`).join('');
   }
 
+  function renderName() {
+    const title = root.querySelector('#meterTitle');
+    if (renaming) {
+      title.innerHTML = `<form class="rename" id="renameForm">
+        <input type="text" id="nameInput" maxlength="64" value="${esc(meter.name || '')}" placeholder="${esc(meter.serial || meter.id)}" aria-label="Device name">
+        <button class="btn small" type="submit">Save</button>
+        <button class="btn small" type="button" data-action="rename-cancel">Cancel</button></form>`;
+      const input = title.querySelector('#nameInput');
+      input.focus();
+      input.select();
+      return;
+    }
+    title.innerHTML = `${esc(meterName(meter))}
+      <button class="btn small icon-only" type="button" data-action="rename" title="Rename device" aria-label="Rename device">${icon('edit')}</button>
+      ${statusBadge(meter.status)} ${signedBadge(meter.verified)}`;
+  }
+
+  async function saveName(value) {
+    const button = root.querySelector('#renameForm [type=submit]');
+    button.disabled = true;
+    try {
+      const saved = await api(devicePath(id, '/name'), { method: 'PUT', body: { name: value } });
+      renaming = false;
+      toast(saved.name ? `Device renamed to "${saved.name}".` : 'Device name cleared.');
+      context.reload('manual');
+    } catch (error) {
+      button.disabled = false;
+      toast(error.message, 'warn');
+    }
+  }
+
   function renderHeader() {
     const values = valueMap(latest?.values);
-    const name = meter.serial || meter.id;
+    const name = meterName(meter);
     context.setCrumb(`<a href="#/meters">Meters</a> <span>/ ${esc(name)}</span>`);
     document.title = `${name} · AMR Data`;
-    const ids = [meter.serial ? `IMEI ${meter.id}` : null, meter.manufacturer, meter.fw ? `FW ${meter.fw}` : null].filter(Boolean);
+    const ids = [
+      meter.name && meter.serial ? `Serial ${meter.serial}` : null,
+      meter.name || meter.serial ? `IMEI ${meter.id}` : null,
+      meter.manufacturer, meter.fw ? `FW ${meter.fw}` : null,
+    ].filter(Boolean);
     const clock = textOf(values, O.clock);
+    // The name keeps its form while the timer refreshes the rest of the header.
+    const keep = renaming && root.querySelector('#renameForm');
+    const focused = keep && keep.contains(document.activeElement) ? document.activeElement : null;
+    if (keep) keep.remove();
     root.querySelector('#meterHead').innerHTML = `
-      <div><h1>${esc(name)} ${statusBadge(meter.status)} ${signedBadge(meter.verified)}</h1><div class="ids">${esc(ids.join(' · '))}</div></div>
+      <div><h1 id="meterTitle"></h1><div class="ids">${esc(ids.join(' · '))}</div></div>
       <div class="facts">
         <div class="fact"><small>Last message</small><b>${esc(dateTime(meter.lastSeen))} · ${agoText(meter.lastSeen)}</b></div>
         <div class="fact"><small>Last meter read</small><b>${meter.lastReadAt ? `${esc(dateTime(meter.lastReadAt))} · ${agoText(meter.lastReadAt)}` : 'None'}</b></div>
         <div class="fact"><small>Read result</small><b>${retBadge(meter.lastReadAt ? meter.lastRet : null)}</b></div>
         ${clock ? `<div class="fact"><small>Meter clock</small><b>${esc(clock)}</b></div>` : ''}
       </div>`;
+    if (keep) {
+      root.querySelector('#meterTitle').append(keep);
+      focused?.focus();
+    } else renderName();
 
     const banners = [];
     const since = (ms) => agoText(ms).replace(' ago', '');
@@ -72,6 +117,11 @@ export function createMeterView(route, context) {
       banners.push(['bad', 'warn', `<strong>The last meter read failed (code ${esc(meter.lastRet)}).</strong> Values shown are what the device could read in that cycle; the Device log tab has the detail.`]);
     }
     for (const issue of meter.issues.filter((i) => i.code === 'read_stale')) banners.push(['warn', 'clock', esc(issue.text)]);
+    const sameName = meter.name ? meters.filter((m) => m.id !== id && m.name?.toLowerCase() === meter.name.toLowerCase()) : [];
+    if (sameName.length) {
+      const links = sameName.map((m) => `<a class="link" href="#/meters/${encodeURIComponent(m.id)}">IMEI ${esc(m.id)}</a>`).join(', ');
+      banners.push(['warn', 'warn', `<strong>Another device has the same name:</strong> ${links}. Rename one of them to tell them apart.`]);
+    }
     root.querySelector('#meterBanner').innerHTML = banners
       .map(([kind, symbol, text]) => `<div class="banner ${kind}" role="status">${icon(symbol)}<div>${text}</div></div>`).join('');
   }
@@ -93,7 +143,7 @@ export function createMeterView(route, context) {
   async function loadHistoryTab(signal) {
     if (historyName !== tab) {
       closeHistory();
-      history = HISTORY_TABS[tab]({ id, meter, latest });
+      history = HISTORY_TABS[tab]({ id, meter, latest, name: () => meter?.name });
       historyName = tab;
       pane().innerHTML = '';
       const holder = document.createElement('div');
@@ -126,6 +176,16 @@ export function createMeterView(route, context) {
       layout();
       root.addEventListener('click', (e) => {
         if (e.target.closest('#meterPane > .state [data-action=retry], #meterRetry')) context.reload('manual');
+        if (e.target.closest('[data-action=rename]')) { renaming = true; renderName(); }
+        if (e.target.closest('[data-action=rename-cancel]')) { renaming = false; renderName(); }
+      });
+      root.addEventListener('submit', (e) => {
+        if (e.target.id !== 'renameForm') return;
+        e.preventDefault();
+        saveName(e.target.querySelector('#nameInput').value);
+      });
+      root.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && e.target.id === 'nameInput') { renaming = false; renderName(); }
       });
     },
     update(next) {
@@ -143,7 +203,8 @@ export function createMeterView(route, context) {
         api('/api/meters', { signal }),
         api(devicePath(id, '/latest'), { signal }),
       ]);
-      meter = list.meters.find((m) => m.id === id);
+      meters = list.meters;
+      meter = meters.find((m) => m.id === id);
       if (!meter) throw Object.assign(new Error('unknown'), { status: 404 });
       latest = reading;
       context.setAlertCount(list.counts);
@@ -156,6 +217,7 @@ export function createMeterView(route, context) {
     hasData: () => Boolean(meter),
     showError(error) {
       meter = null;
+      renaming = false;
       closeHistory();
       document.title = 'AMR Data';
       if (error.status === 404) {

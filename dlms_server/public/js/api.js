@@ -14,14 +14,17 @@ function friendlyMessage(status, code) {
   if (status === 401) return 'Signed out. Opening the sign-in page.';
   if (status === 404) return code === 'unknown_device' ? 'This device has never sent data to this server.' : 'Not found.';
   if (status === 429) return 'Too many failed logins from this address. Try again later.';
-  if (status === 400) return `The request was not valid (${code}).`;
+  if (status === 400) return code === 'bad_name' ? 'Names can have up to 64 characters and no control characters.' : `The request was not valid (${code}).`;
   return `The server returned an error (${status}).`;
 }
 
-export async function api(path, { signal, text = false } = {}) {
+// A body is sent as JSON with "X-AMR-Data: 1", which the server needs on writes.
+export async function api(path, { signal, text = false, method = 'GET', body } = {}) {
+  const headers = { Accept: text ? 'text/plain' : 'application/json' };
+  if (body !== undefined) Object.assign(headers, { 'Content-Type': 'application/json', 'X-AMR-Data': '1' });
   let res;
   try {
-    res = await fetch(path, { headers: { Accept: text ? 'text/plain' : 'application/json' }, signal });
+    res = await fetch(path, { method, headers, body: body === undefined ? undefined : JSON.stringify(body), signal });
   } catch (error) {
     if (error.name === 'AbortError') throw error;
     throw new ApiError('The server cannot be reached. Check the network connection.', 0);

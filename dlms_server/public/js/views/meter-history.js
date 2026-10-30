@@ -72,7 +72,11 @@ function drawChart(holder, { labels, series, bar = false, unit = '' }) {
   });
 }
 
-const csvName = (id, what) => `${id}-${what}-${meterTimeText(serverNow()).slice(0, 10)}.csv`;
+// Starts with the device name when it has one, so saved files are easy to tell apart.
+const csvName = (name, id, what) => {
+  const prefix = (name() || '').replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-|-$/g, '').toLowerCase();
+  return `${prefix ? `${prefix}-` : ''}${id}-${what}-${meterTimeText(serverNow()).slice(0, 10)}.csv`;
+};
 
 // ------------------------------------------------------------------ trends
 const TREND_PRESETS = [
@@ -84,7 +88,7 @@ const TREND_PRESETS = [
   ['energy', 'Energy import (kWh / kVAh)', [O.kwh, O.kvah], [], false],
 ];
 
-export function createTrendsTab({ id, latest: initial }) {
+export function createTrendsTab({ id, name, latest: initial }) {
   const state = { preset: '', hours: 168 };
   let root;
   let latest = initial;
@@ -203,7 +207,7 @@ export function createTrendsTab({ id, latest: initial }) {
           load().catch(() => {});
         }
         if (e.target.closest('[data-action=csv]') && rows.length) {
-          downloadCsv(csvName(id, 'trend'), ['read_at', ...series.map((s) => `${s.name} (${s.unit})`)],
+          downloadCsv(csvName(name, id, 'trend'), ['read_at', ...series.map((s) => `${s.name} (${s.unit})`)],
             rows.map((r) => [dateTime(r.readAt), ...series.map((s) => r.values[s.obis] ?? '')]));
         }
         if (e.target.closest('[data-action=retry]')) load().catch(() => {});
@@ -238,7 +242,7 @@ function profileMetrics(p) {
   return out;
 }
 
-export function createProfilesTab({ id }) {
+export function createProfilesTab({ id, name }) {
   const state = { obis: '', days: 7, metric: '', page: 1 };
   let root;
   let list = [];
@@ -381,7 +385,7 @@ export function createProfilesTab({ id }) {
           return renderTable();
         }
         if (e.target.closest('[data-action=csv]') && profile?.rows.length) {
-          downloadCsv(csvName(id, (profile.name || profile.obis).replace(/\W+/g, '-').toLowerCase()),
+          downloadCsv(csvName(name, id, (profile.name || profile.obis).replace(/\W+/g, '-').toLowerCase()),
             [...profile.cols.map(colLabel), 'event'], profile.rows.map((r) => [...profile.cols.map((c, i) => r.c[i] ?? ''), r.e || '']));
         }
         if (e.target.closest('[data-action=retry]')) reload();
@@ -401,7 +405,7 @@ const BILLING_METRICS = [
   ['pf', 'Average power factor', '1.0.13.0.0.255', false],
 ];
 
-export function createBillingTab({ id }) {
+export function createBillingTab({ id, name }) {
   const state = { metric: 'kwh' };
   let root;
   let profile = null;
@@ -480,7 +484,7 @@ export function createBillingTab({ id }) {
       root.querySelector('#bMetric').addEventListener('change', (e) => { state.metric = e.target.value; renderChart(); });
       root.addEventListener('click', (e) => {
         if (e.target.closest('[data-action=csv]') && profile?.rows.length) {
-          downloadCsv(csvName(id, 'billing'), profile.cols.map(colLabel), profile.rows.map((r) => profile.cols.map((c, i) => r.c[i] ?? '')));
+          downloadCsv(csvName(name, id, 'billing'), profile.cols.map(colLabel), profile.rows.map((r) => profile.cols.map((c, i) => r.c[i] ?? '')));
         }
         if (e.target.closest('[data-action=retry]')) load().catch(() => {});
       });
@@ -493,7 +497,7 @@ export function createBillingTab({ id }) {
 // ------------------------------------------------------------------ events
 const EVENT_CODE = /^0\.0\.96\.11\./;
 
-export function createEventsTab({ id }) {
+export function createEventsTab({ id, name }) {
   const state = { days: -1, cat: '', page: 1 };
   let root;
   let events = [];
@@ -588,7 +592,7 @@ export function createEventsTab({ id }) {
           return render();
         }
         if (e.target.closest('[data-action=csv]') && events.length) {
-          downloadCsv(csvName(id, 'events'), ['time', 'category', 'event', 'code', 'snapshot'], visible().map((v) => [v.t, v.label, v.e, v.code, v.details]));
+          downloadCsv(csvName(name, id, 'events'), ['time', 'category', 'event', 'code', 'snapshot'], visible().map((v) => [v.t, v.label, v.e, v.code, v.details]));
         }
         if (e.target.closest('[data-action=retry]')) load().catch(() => {});
       });
@@ -598,7 +602,7 @@ export function createEventsTab({ id }) {
 }
 
 // ------------------------------------------------------------- read cycles
-export function createReadingsTab({ id }) {
+export function createReadingsTab({ id, name }) {
   const state = { hours: 168, page: 1 };
   let root;
   let rows = [];
@@ -659,7 +663,7 @@ export function createReadingsTab({ id }) {
           return render();
         }
         if (e.target.closest('[data-action=csv]') && rows.length) {
-          downloadCsv(csvName(id, 'read-cycles'), ['read_at', 'received_at', 'values', 'result', 'fw', 'signed'],
+          downloadCsv(csvName(name, id, 'read-cycles'), ['read_at', 'received_at', 'values', 'result', 'fw', 'signed'],
             rows.map((r) => [dateTime(r.readAt), dateTime(r.receivedAt), r.valueCount, r.ret, r.fw || '', r.verified ? 1 : 0]));
         }
         if (e.target.closest('[data-action=retry]')) load().catch(() => {});

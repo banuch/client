@@ -193,6 +193,7 @@ export async function renderInfo({ meter, latest, id, signal }) {
     ['Last billing date', text(O.billingDate)],
   ]);
   const device = kvList([
+    ['Device name', meter.name || '—'],
     ['Device ID (IMEI)', meter.id],
     ['Device firmware', meter.fw || '—'],
     ['Signed data', { html: signedBadge(meter.verified) }],

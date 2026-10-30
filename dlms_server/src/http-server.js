@@ -15,6 +15,7 @@
 //    GET /api/devices/:id/profiles/:obis?from=&to=&limit=   rows of one profile, newest first
 //    GET /api/devices/:id/log-dates                    days that have a log file
 //    GET /api/devices/:id/logs?date=YYYY-MM-DD&tail=N  end of one day's log (text)
+//    PUT /api/devices/:id/name  {name}                 set the name shown on the page ("" clears it)
 //
 //  from / to: epoch milliseconds or an ISO date. Times in replies are epoch ms.
 //  Profile rows are the exception: their time t is the meter's local time as
@@ -28,7 +29,8 @@
 //  which sets an HttpOnly session cookie. Scripts may send HTTP Basic with the
 //  same login instead. Without a password the page has no login and config.js
 //  binds it to 127.0.0.1 only. After LOGIN_MAX_FAILS wrong passwords an IP is
-//  locked out for LOGIN_LOCK_SEC. The /auth POSTs need "X-AMR-Data: 1".
+//  locked out for LOGIN_LOCK_SEC. The /auth POSTs and the API PUT need
+//  "X-AMR-Data: 1".
 // =============================================================================
 const path = require('path');
 const crypto = require('crypto');
@@ -38,6 +40,8 @@ const { SUMMARY_OBIS, buildMeters, countStatuses, attention, byFirmware, dayStar
 const DEVICE_ID = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$/;
 const OBIS = /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/;
 const ROW_TIME = /^\d{4}-\d\d-\d\d( \d\d:\d\d(:\d\d)?)?$/;
+const NAME_MAX = 64;
+const CONTROL_CHARS = /[\u0000-\u001f\u007f-\u009f]/;
 const SESSION_COOKIE = 'amr_sid';
 const CSRF_HEADER = 'x-amr-data';   // login/logout POSTs must carry "X-AMR-Data: 1"
 const MAX_SESSIONS = 1000;
@@ -51,6 +55,15 @@ function parseRowTime(v, isTo) {
   if (!ROW_TIME.test(s)) return undefined;
   if (s.length === 10) return isTo ? `${s} 23:59:59` : `${s} 00:00:00`;
   return s.length === 16 ? `${s}:${isTo ? '59' : '00'}` : s;
+}
+
+/** Device name from a request: trimmed text, null to clear, undefined if not valid. */
+function parseName(v) {
+  if (v === null) return null;
+  if (typeof v !== 'string') return undefined;
+  const s = v.trim();
+  if (CONTROL_CHARS.test(s) || [...s].length > NAME_MAX) return undefined;
+  return s || null;
 }
 
 function safeEqual(a, b) {
@@ -291,6 +304,14 @@ function createHttpApp(cfg, { db, logs }) {
     const p = db.profileRows({ deviceId: req.params.id, obis: req.params.obis, from, to, limit });
     if (!p) return res.status(404).json({ error: 'unknown_profile' });
     res.json(p);
+  });
+
+  api.put('/devices/:id/name', express.json({ limit: '1kb' }), (req, res) => {
+    if (req.get(CSRF_HEADER) !== '1') return res.status(403).json({ error: 'csrf_header_missing' });
+    const name = parseName(req.body?.name);
+    if (name === undefined) return res.status(400).json({ error: 'bad_name' });
+    db.setName(req.params.id, name);
+    res.json({ id: req.params.id, name });
   });
 
   api.get('/devices/:id/log-dates', (req, res) => res.json(logs.dates(req.params.id)));

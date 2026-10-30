@@ -107,6 +107,12 @@ export function msToLocalInput(ms) {
   return p ? `${p.year}-${p.month}-${p.day}T${p.hour}:${p.minute}` : '';
 }
 
+// Name shown for a meter: the name set on the page, else the meter serial, else the IMEI.
+export const meterName = (m) => m.name || m.serial || m.id;
+
+// The identifiers the shown name does not already give, for the line under it.
+export const meterIds = (m) => [m.name ? m.serial : null, m.name || m.serial ? m.id : null].filter(Boolean);
+
 export function present(value) {
   return value !== null && value !== undefined && value !== '' && Number.isFinite(Number(value));
 }

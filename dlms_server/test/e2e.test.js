@@ -397,6 +397,60 @@ test('unknown device and bad parameters', async () => {
   });
 });
 
+test('device name: set, shown everywhere, kept when the device sends, cleared', async () => {
+  await withServer({}, async (s) => {
+    const put = (id, body, headers = { 'X-AMR-Data': '1' }) => fetch(`http://127.0.0.1:${s.httpPort}/api/devices/${id}/name`, {
+      method: 'PUT',
+      headers: { Authorization: 'Basic ' + Buffer.from(`admin:${PASSWORD}`).toString('base64'), 'Content-Type': 'application/json', ...headers },
+      body: JSON.stringify(body),
+    }).then(async (r) => ({ status: r.status, body: await r.json() }));
+    const reading = (seq) => buildMessage({ type: 'READING', deviceId: IMEI, boot: 1, seq, body: JSON.stringify(READING), key: KEY });
+    await send(s.tcpPort, reading(0), 1);
+    assert.strictEqual((await get(s, '/api/meters')).body.meters[0].name, null);
+
+    assert.strictEqual((await put('nope', { name: 'X' })).status, 404);
+    assert.strictEqual((await put(IMEI, { name: 'X' }, {})).status, 403, 'needs the X-AMR-Data header');
+    for (const name of [42, 'a'.repeat(65), 'tab\there', undefined]) {
+      assert.strictEqual((await put(IMEI, { name })).status, 400, `rejects ${JSON.stringify(name)}`);
+    }
+
+    assert.deepStrictEqual((await put(IMEI, { name: '  Substation 3 – Feeder B  ' })).body, { id: IMEI, name: 'Substation 3 – Feeder B' });
+    assert.strictEqual((await put(IMEI, { name: 'स'.repeat(64) })).status, 200, '64 characters, not bytes');
+    await put(IMEI, { name: 'Substation 3 – Feeder B' });
+    await send(s.tcpPort, reading(1), 1);
+    assert.strictEqual((await get(s, '/api/meters')).body.meters[0].name, 'Substation 3 – Feeder B', 'a new message keeps the name');
+    assert.strictEqual((await get(s, '/api/devices')).body[0].name, 'Substation 3 – Feeder B');
+    const fleet = (await get(s, '/api/fleet')).body;
+    assert.strictEqual(fleet.lastMessage.name, 'Substation 3 – Feeder B');
+
+    assert.deepStrictEqual((await put(IMEI, { name: '   ' })).body, { id: IMEI, name: null });
+    assert.strictEqual((await get(s, '/api/meters')).body.meters[0].name, null);
+  });
+});
+
+test('migration 2 adds the name column to a database made before it', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'amr-data-'));
+  try {
+    const file = path.join(dir, 'old.db');
+    const Database = require('better-sqlite3');
+    const old = new Database(file);
+    old.exec(`CREATE TABLE devices (id TEXT PRIMARY KEY, first_seen INTEGER NOT NULL, last_seen INTEGER NOT NULL,
+      last_ip TEXT, fw TEXT, verified INTEGER NOT NULL DEFAULT 0, last_reading_id INTEGER);
+      INSERT INTO devices (id, first_seen, last_seen) VALUES ('${IMEI}', 1, 2);`);
+    old.pragma('user_version = 1');
+    old.close();
+    const { openDb } = require('../src/db');
+    const db = openDb(file);
+    assert.strictEqual(db.db.pragma('user_version', { simple: true }), 2);
+    assert.strictEqual(db.listDevices()[0].name, null);
+    assert.ok(db.setName(IMEI, 'Pump house'));
+    assert.strictEqual(db.listDevices()[0].name, 'Pump house');
+    db.close();
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('retention removes old readings and keeps the newest', async () => {
   let now = Date.UTC(2026, 9, 1);
   await withServer({ clock: () => now }, async (s) => {

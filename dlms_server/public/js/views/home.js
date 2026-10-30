@@ -1,7 +1,7 @@
 // Home: status of every device, today's traffic, and the meters that need
 // attention, most urgent first.
 import { api } from '../api.js';
-import { shortTime, int } from '../format.js';
+import { shortTime, int, meterName, meterIds } from '../format.js';
 import { esc, icon, statusBadge, timeCell, agoText, stateBox, errorBox, skeletonRows, issueList, applyGrow } from '../ui.js';
 
 const REFRESH_MS = 30000;
@@ -78,7 +78,7 @@ export function createHomeView(route, context) {
       kpi({ tone: counts.readFailed ? 'bad' : '', symbol: 'warn', label: 'Meter read failed', value: int(counts.readFailed), note: `Last cycle failed or no reading · ${int(data.failedToday)} failed today`, href: '#/meters?status=failed' }),
       kpi({
         symbol: 'inbox', label: 'Last message', value: esc(last ? shortTime(last.at) : '—'), valueClass: 'time',
-        note: last ? `${agoText(last.at)} · ${esc(last.id)}<br>${int(data.readingsToday)} readings, ${int(data.logsToday)} logs today${hourBars()}` : 'Nothing received',
+        note: last ? `${agoText(last.at)} · ${esc(last.name || last.id)}<br>${int(data.readingsToday)} readings, ${int(data.logsToday)} logs today${hourBars()}` : 'Nothing received',
       }),
     ].join('');
     root.querySelector('#health').innerHTML = healthBar(counts)
@@ -90,7 +90,7 @@ export function createHomeView(route, context) {
     root.querySelector('#attentionBody').innerHTML = list.length
       ? `<div class="tscroll"><table class="cards"><thead><tr><th>Meter</th><th>Status</th><th>Last message</th><th>Issue</th></tr></thead><tbody>
         ${list.map((m) => `<tr class="row-link" data-href="#/meters/${encodeURIComponent(m.id)}">
-          <td class="full"><a class="link" href="#/meters/${encodeURIComponent(m.id)}">${esc(m.serial || m.id)}</a><span class="sub">${esc([m.serial ? m.id : null, m.manufacturer].filter(Boolean).join(' · '))}</span></td>
+          <td class="full"><a class="link" href="#/meters/${encodeURIComponent(m.id)}">${esc(meterName(m))}</a><span class="sub">${esc([...meterIds(m), m.manufacturer].join(' · '))}</span></td>
           <td data-l="Status">${statusBadge(m.status)}</td>
           <td data-l="Last message">${timeCell(m.lastSeen)}</td>
           <td class="wrap" data-l="Issue">${issueList(m.issues)}</td>
