@@ -84,7 +84,14 @@ function createLogStore({ logDir, timezone }) {
     return removed;
   }
 
-  return { append, dates, tail, prune, today: (ms) => day(ms) };
+  /** Delete a device's log folder. Returns the number of log files removed. */
+  function removeDevice(deviceId) {
+    const n = dates(deviceId).length;
+    fs.rmSync(deviceDir(deviceId), { recursive: true, force: true });
+    return n;
+  }
+
+  return { append, dates, tail, prune, removeDevice, today: (ms) => day(ms) };
 }
 
 module.exports = { createLogStore };

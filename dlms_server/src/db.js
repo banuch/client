@@ -375,6 +375,19 @@ function openDb(file) {
     return n;
   });
 
+  // ── Delete ───────────────────────────────────────────────────────────────
+  // A device that still sends is created again, empty, by its next message.
+  const deleteStmts = {
+    readings: db.prepare('DELETE FROM readings WHERE device_id = ?'),   // reading_values cascade
+    profileRows: db.prepare('DELETE FROM profile_rows WHERE device_id = ?'),
+    profileColumns: db.prepare('DELETE FROM profile_columns WHERE device_id = ?'),
+    logUploads: db.prepare('DELETE FROM log_uploads WHERE device_id = ?'),
+    devices: db.prepare('DELETE FROM devices WHERE id = ?'),
+  };
+  /** Remove a device and everything stored for it. Returns rows removed per table. */
+  const deleteDevice = db.transaction((id) => Object.fromEntries(
+    Object.entries(deleteStmts).map(([k, stmt]) => [k, stmt.run(id).changes])));
+
   return {
     db,
     saveReading,
@@ -394,6 +407,7 @@ function openDb(file) {
     lastMessage: () => lastMessageStmt.get() || null,
     deviceStats,
     prune,
+    deleteDevice,
     close: () => db.close(),
   };
 }

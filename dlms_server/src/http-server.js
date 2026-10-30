@@ -16,6 +16,7 @@
 //    GET /api/devices/:id/log-dates                    days that have a log file
 //    GET /api/devices/:id/logs?date=YYYY-MM-DD&tail=N  end of one day's log (text)
 //    PUT /api/devices/:id/name  {name}                 set the name shown on the page ("" clears it)
+//    DELETE /api/devices/:id                           delete the device, its readings, profiles and logs
 //
 //  from / to: epoch milliseconds or an ISO date. Times in replies are epoch ms.
 //  Profile rows are the exception: their time t is the meter's local time as
@@ -29,7 +30,7 @@
 //  which sets an HttpOnly session cookie. Scripts may send HTTP Basic with the
 //  same login instead. Without a password the page has no login and config.js
 //  binds it to 127.0.0.1 only. After LOGIN_MAX_FAILS wrong passwords an IP is
-//  locked out for LOGIN_LOCK_SEC. The /auth POSTs and the API PUT need
+//  locked out for LOGIN_LOCK_SEC. The /auth POSTs, the API PUT and DELETE need
 //  "X-AMR-Data: 1".
 // =============================================================================
 const path = require('path');
@@ -318,6 +319,13 @@ function createHttpApp(cfg, { db, logs }) {
     if (name === undefined) return res.status(400).json({ error: 'bad_name' });
     db.setName(req.params.id, name);
     res.json({ id: req.params.id, name });
+  });
+
+  api.delete('/devices/:id', (req, res) => {
+    if (req.get(CSRF_HEADER) !== '1') return res.status(403).json({ error: 'csrf_header_missing' });
+    const removed = db.deleteDevice(req.params.id);
+    removed.logFiles = logs.removeDevice(req.params.id);
+    res.json({ id: req.params.id, removed });
   });
 
   api.get('/devices/:id/log-dates', (req, res) => res.json(logs.dates(req.params.id)));
