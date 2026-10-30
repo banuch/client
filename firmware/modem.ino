@@ -11,10 +11,22 @@
 //  firmware data (which can contain "\r\n", "OK", NULs...) is never mangled
 //  by String-based searching. modem_ensure() (FW 2.0.9) checks the module
 //  before each use and powers it back on with PWRKEY when it went off.
+//  FW 2.0.12: SET apn=auto (the default) picks the APN from the SIM's
+//  operator, see "APN" below.
 // =============================================================================
+
+#include <Preferences.h>
 
 static uint32_t s_lastSocketCloseMs = 0;
 static bool s_modemDown = false;   // set when the module reported a power-down or restart
+
+// APN in use (see "APN" below).
+struct ApnEntry { const char* name; const char* apn; };
+static const ApnEntry APNS[] = APN_TABLE;
+static String s_apnUsed;           // APN of the active PDP context
+static String s_apnFrom = "-";     // "set", "saved", "operator", "fallback"
+static String s_operator;          // APN_TABLE name the SIM / network reported
+static String s_iccid;
 
 // ── Low-level helpers ───────────────────────────────────────────────────────
 // Drop leftover bytes. Among them, notices that the module switched off or
@@ -121,30 +133,172 @@ bool modem_init() {
 
     modem_atCollect("AT+CPIN?", 2000);
     modem_atCollect("AT+CFUN=1", 3000);
-    String ctx = modem_atCollect("AT+CGDCONT?", 2000);
-    if (ctx.indexOf("+CGDCONT: 1,\"IP\",\"" + g_cfg.apn + "\"") == -1) {
-        modem_atCollect(("AT+CGDCONT=1,\"IP\",\"" + g_cfg.apn + "\"").c_str(), 2000);
-    }
     modem_atCollect("AT+CTZU=1", 1000);     // keep the clock synced to the network (NITZ)
     modem_atCollect("AT+CSQ", 1000);
-    modem_atCollect("AT+CGATT=1", 10000);
 
-    bool attached = false;
-    uint32_t deadline = millis() + 60000UL;
-    while (!attached && (int32_t)(deadline - millis()) > 0) {
-        attached = modem_atCollect("AT+CGATT?", 2000).indexOf("+CGATT: 1") != -1;
-        if (!attached) delay(2000);
+    bool ok = g_cfg.apn == APN_AUTO ? modem_autoApn() : modem_tryApn(g_cfg.apn) == APN_OK;
+    if (ok && g_cfg.apn != APN_AUTO) {
+        s_apnUsed = g_cfg.apn;
+        s_apnFrom = "set";
     }
-    if (!attached) {
-        MODEM_DEBUG.println("[MDM] ERR: not attached to packet network");
-        return false;
+    if (ok) MODEM_DEBUG.printf("[MDM] Attached, PDP active, APN \"%s\"\n", s_apnUsed.c_str());
+    return ok;
+}
+
+// ── APN ─────────────────────────────────────────────────────────────────────
+// g_cfg.apn is an APN set by hand (always used) or APN_AUTO. Auto: the APN
+// that last worked with this SIM (ICCID) first, then the one for the
+// operator name the SIM / network reports (APN_TABLE), then the rest of the
+// table, then an empty APN. The one that works is saved for this SIM, so a
+// new SIM is detected again. Steps are printed on TraceSerial (uploaded).
+#define MODEM_ATTACH_WAIT_MS 60000UL
+#define MODEM_OPERATOR_WAIT_MS 30000UL
+
+// Registration on LTE (CEREG) or 2G (CREG): 1 registered (home or roaming),
+// 0 not (yet), -1 refused by the network ("denied", stat 3).
+static int modem_regState() {
+    int state = 0;
+    const char* cmds[] = {"AT+CEREG?", "AT+CREG?"};
+    for (const char* cmd : cmds) {
+        String r = modem_atCollect(cmd, 2000);
+        int i = r.indexOf("REG: ");
+        int comma = i == -1 ? -1 : r.indexOf(',', i);
+        if (comma == -1) continue;
+        int stat = r.substring(comma + 1).toInt();
+        if (stat == 1 || stat == 5) return 1;
+        if (stat == 3) state = -1;
+    }
+    return state;
+}
+
+static String modem_readIccid() {
+    String r = modem_atCollect("AT+QCCID", 2000);
+    int i = r.indexOf("+QCCID:");
+    if (i == -1) return "";
+    String id;
+    for (size_t k = i + 7; k < r.length() && id.length() < 22; k++) {
+        if (isAlphaNumeric(r[k])) id += r[k];
+        else if (id.length()) break;
+    }
+    return id;
+}
+
+// The APN_TABLE entry whose name is in the SIM provider name (AT+QSPN) or the
+// network name (AT+COPS?), waiting up to MODEM_OPERATOR_WAIT_MS for
+// registration. -1 if no name matches.
+static int modem_operatorApn() {
+    uint32_t t = millis();
+    while (millis() - t < MODEM_OPERATOR_WAIT_MS) {
+        if (modem_regState() == 1) break;
+        delay(2000);
+    }
+    modem_atCollect("AT+COPS=3,0", 2000);   // long alphanumeric operator name
+    String names[] = {modem_atCollect("AT+QSPN", 2000), modem_atCollect("AT+COPS?", 3000)};
+    for (String& n : names) {
+        n.toLowerCase();
+        for (size_t e = 0; e < sizeof(APNS) / sizeof(APNS[0]); e++) {
+            if (n.indexOf(APNS[e].name) != -1) {
+                s_operator = APNS[e].name;
+                return (int)e;
+            }
+        }
+    }
+    s_operator = "";
+    return -1;
+}
+
+static bool modem_waitAttach() {
+    modem_atCollect("AT+CGATT=1", 10000);
+    uint32_t deadline = millis() + MODEM_ATTACH_WAIT_MS;
+    while ((int32_t)(deadline - millis()) > 0) {
+        if (modem_atCollect("AT+CGATT?", 2000).indexOf("+CGATT: 1") != -1) return true;
+        delay(2000);
+    }
+    return false;
+}
+
+// Attach and activate the PDP context with this APN. A different APN is
+// written with the radio off (CFUN=4), so the LTE attach really uses it.
+static ApnResult modem_tryApn(const String& apn) {
+    String ctx = modem_atCollect("AT+CGDCONT?", 2000);
+    if (ctx.indexOf("+CGDCONT: 1,\"IP\",\"" + apn + "\"") == -1) {
+        modem_atCollect("AT+QIDEACT=1", 10000);
+        modem_atCollect("AT+CFUN=4", 15000);
+        modem_atCollect(("AT+CGDCONT=1,\"IP\",\"" + apn + "\"").c_str(), 2000);
+        modem_atCollect("AT+CFUN=1", 15000);
+    }
+    if (!modem_waitAttach()) {
+        // No coverage: another APN will not help. Refused: it may.
+        bool denied = modem_regState() == -1;
+        MODEM_DEBUG.printf("[MDM] ERR: not attached to packet network (%s)\n", denied ? "denied" : "no network");
+        return denied ? APN_REFUSED : APN_NO_NETWORK;
     }
     if (!modem_ensurePdp()) {
         MODEM_DEBUG.println("[MDM] ERR: PDP context activation failed");
-        return false;
+        return APN_REFUSED;
     }
-    MODEM_DEBUG.println("[MDM] Attached, PDP active");
-    return true;
+    s_apnUsed = apn;
+    return APN_OK;
+}
+
+static bool modem_autoApn() {
+    s_iccid = modem_readIccid();
+    String saved, savedSim;
+    {
+        Preferences p;
+        p.begin(NVS_NAMESPACE, true);
+        saved = p.isKey(K_APN_OK) ? p.getString(K_APN_OK, "") : String("");
+        savedSim = p.getString(K_APN_SIM, "");
+        p.end();
+    }
+    bool savedValid = saved.length() && s_iccid.length() && savedSim == s_iccid;
+    // Candidates in order, without repeats; "" (empty APN) last.
+    const size_t n = sizeof(APNS) / sizeof(APNS[0]);
+    String list[n + 3];
+    const char* from[n + 3];
+    size_t count = 0;
+    auto add = [&](const String& apn, const char* src) {
+        for (size_t i = 0; i < count; i++) if (list[i] == apn) return;
+        list[count] = apn;
+        from[count++] = src;
+    };
+    if (savedValid) add(saved, "saved");
+    int op = modem_operatorApn();
+    if (op >= 0) add(APNS[op].apn, "operator");
+    for (size_t e = 0; e < n; e++) add(APNS[e].apn, "fallback");
+    add("", "fallback");
+
+    for (size_t i = 0; i < count; i++) {
+        ApnResult r = modem_tryApn(list[i]);
+        if (r == APN_OK) {
+            s_apnFrom = from[i];
+            if (s_iccid.length() && (!savedValid || saved != list[i])) {
+                Preferences p;
+                p.begin(NVS_NAMESPACE, false);
+                p.putString(K_APN_OK, list[i]);
+                p.putString(K_APN_SIM, s_iccid);
+                p.end();
+                TraceSerial.printf("\r\n[MDM] APN \"%s\" (%s%s%s) works with SIM ...%s, saved\r\n",
+                                   list[i].c_str(), from[i], s_operator.length() ? ", operator " : "",
+                                   s_operator.c_str(), s_iccid.substring(s_iccid.length() > 4 ? s_iccid.length() - 4 : 0).c_str());
+            }
+            return true;
+        }
+        TraceSerial.printf("\r\n[MDM] APN \"%s\" (%s) %s\r\n", list[i].c_str(), from[i],
+                           r == APN_NO_NETWORK ? "not tried further: no network" : "refused, trying the next");
+        if (r == APN_NO_NETWORK) break;
+    }
+    s_apnUsed = "";
+    return false;
+}
+
+// For GET_STATUS: "apn=<setting> apn_use=<active> apn_from=<how> operator=<name> sim=...<last 4>".
+String modem_apnStatusLine() {
+    String sim = s_iccid.length() > 4 ? "..." + s_iccid.substring(s_iccid.length() - 4) : String("-");
+    return "apn=" + (g_cfg.apn.length() ? g_cfg.apn : String("\"\"")) +
+           " apn_use=" + (g_ota.modemReady ? (s_apnUsed.length() ? s_apnUsed : String("\"\"")) : String("-")) +
+           " apn_from=" + s_apnFrom + " operator=" + (s_operator.length() ? s_operator : String("-")) +
+           " sim=" + sim;
 }
 
 // ── Health check and recovery ───────────────────────────────────────────────
