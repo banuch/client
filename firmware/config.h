@@ -14,7 +14,7 @@
 #include "trace_tee.h"
 
 // ── Firmware identity ───────────────────────────────────────────────────────
-#define FW_VERSION "2.0.11" // MAJOR.MINOR.PATCH -- bump before each release
+#define FW_VERSION "2.0.13" // MAJOR.MINOR.PATCH -- bump before each release
 
 // ── Debug output ────────────────────────────────────────────────────────────
 // OTA results go through the trace tee, so they also reach the data server.
@@ -81,7 +81,14 @@
 // ── OTA server / timing defaults (NVS overrides) ────────────────────────────
 #define OTA_HOST_DEFAULT "65.20.77.137"
 #define OTA_PORT_DEFAULT 7000
-#define APN_DEFAULT "airtelgprs.com"
+// "auto" = pick the APN from the SIM's operator (modem.ino); SET apn=<name>
+// fixes one (IoT/M2M SIMs have their own), SET apn=auto goes back.
+#define APN_AUTO "auto"
+#define APN_DEFAULT APN_AUTO
+// Operator name (SIM provider or network name, any case) -> APN. Also the
+// order tried when the operator is unknown or its APN fails: Airtel first,
+// the fixed default before auto mode existed. Then an empty APN.
+#define APN_TABLE {{"airtel", "airtelgprs.com"}, {"jio", "jionet"}, {"bsnl", "bsnlnet"}, {"cellone", "bsnlnet"}}
 #define CHECK_INTERVAL_DEFAULT_S  600L // 24 h; the server may override per device
 #define CHECK_INTERVAL_MIN_S 300UL
 #define CHECK_RETRY_S 900UL        // after a failed check / download
@@ -115,6 +122,8 @@
 #define K_SECRET "secret" // 64-char hex device key
 #define K_INTERVAL "interval"
 #define K_APN "apn"
+#define K_APN_OK "apn_ok"         // auto mode: the APN that last worked ...
+#define K_APN_SIM "apn_sim"       // ... with the SIM of this ICCID
 #define K_PENDING_VER "pend_ver" // set before reboot into a new image
 #define K_READ "read_s"           // meter reading interval, seconds
 #define K_PROFILE "prof_min"      // profile read interval, minutes
@@ -189,6 +198,14 @@ struct OtaState
     bool busy = false;
 };
 extern OtaState g_ota;
+
+// Result of one APN attempt (modem.ino).
+enum ApnResult
+{
+    APN_OK,
+    APN_NO_NETWORK,   // not attached and not refused: no coverage, another APN won't help
+    APN_REFUSED       // attach denied or PDP activation failed: try another APN
+};
 
 // Command source -- BLE gets a restricted command set (see commands.ino).
 enum CmdSource

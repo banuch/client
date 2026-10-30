@@ -1,7 +1,8 @@
 <!doctype html>
 <!--
-  BLE configurator for the AMR device (firmware/ble_meter.h, firmware/ota_ble.ino).
-  Web Bluetooth: open in Chrome or Edge from file:// or http://localhost.
+  AMR BLE configurator: commission and troubleshoot an AMR device over Bluetooth.
+  Goals and the firmware behaviour this page relies on: README.md next to this file.
+  Open in Chrome or Edge from file:// or http://localhost. index.html?demo = simulated device.
 -->
 <html lang="en">
 <head>
@@ -10,564 +11,1238 @@
 <title>AMR BLE Configurator</title>
 <style>
   :root {
-    --bg: #f5f6f8; --panel: #ffffff; --text: #1d2330; --muted: #667085;
-    --border: #d9dde5; --accent: #2563eb; --accent-text: #ffffff;
-    --ok: #15803d; --err: #b91c1c; --warn: #b45309; --code-bg: #0f172a; --code-text: #e2e8f0;
+    --bg: #f4f5f7; --panel: #ffffff; --raised: #f8f9fb; --text: #18202c; --muted: #5f6b7a;
+    --border: #dde1e7; --accent: #1d5bd8; --accent-soft: #e6eefc; --on-accent: #ffffff;
+    --ok: #157a3c; --ok-soft: #e4f4ea; --warn: #9a5b00; --warn-soft: #fdf1dc;
+    --bad: #b42318; --bad-soft: #fde8e6; --info: #4b5563; --info-soft: #eef0f3;
+    --code-bg: #0f1623; --code-text: #dbe3ee; --code-tx: #8cb8ff; --code-ok: #7ee2a0; --code-bad: #ff9c94; --code-sys: #8a97a8;
+    --radius: 10px;
   }
   @media (prefers-color-scheme: dark) {
     :root {
-      --bg: #0f1218; --panel: #171b24; --text: #e6e9ef; --muted: #98a2b3;
-      --border: #2a3140; --accent: #3b82f6; --accent-text: #ffffff;
-      --ok: #4ade80; --err: #f87171; --warn: #fbbf24; --code-bg: #0a0d12; --code-text: #d6dde8;
+      --bg: #0e1117; --panel: #161b23; --raised: #1c222c; --text: #e7eaf0; --muted: #9aa5b4;
+      --border: #2a3240; --accent: #5b8ff0; --accent-soft: #1d2a44; --on-accent: #0b1220;
+      --ok: #5fd08a; --ok-soft: #13291c; --warn: #f2b24c; --warn-soft: #2e2412;
+      --bad: #ff8a80; --bad-soft: #351918; --info: #b4bdc9; --info-soft: #222a35;
+      --code-bg: #0a0d13;
     }
   }
   * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--text);
-         font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
-  header { display: flex; flex-wrap: wrap; align-items: center; gap: 12px;
-           padding: 12px 16px; background: var(--panel); border-bottom: 1px solid var(--border); }
-  header h1 { font-size: 17px; margin: 0 12px 0 0; }
-  .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); display: inline-block; }
-  .dot.on { background: var(--ok); }
-  #connState { color: var(--muted); }
-  main { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px;
-         padding: 16px; max-width: 1400px; margin: 0 auto; }
-  @media (max-width: 900px) { main { grid-template-columns: minmax(0, 1fr); } }
-  section { background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
-            padding: 14px; min-width: 0; }
-  h2 { font-size: 15px; margin: 0 0 4px; }
-  h3 { font-size: 13px; margin: 14px 0 6px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
-  .sub { color: var(--muted); font-size: 12px; margin: 0 0 8px; }
-  .row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 6px 0; }
-  button { font: inherit; padding: 6px 12px; border-radius: 6px; border: 1px solid var(--border);
-           background: var(--panel); color: var(--text); cursor: pointer; }
-  button:hover:not(:disabled) { border-color: var(--accent); }
-  button.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
-  button.danger { color: var(--err); }
-  button:disabled { opacity: .45; cursor: not-allowed; }
-  input { font: inherit; padding: 6px 8px; border-radius: 6px; border: 1px solid var(--border);
-          background: var(--bg); color: var(--text); min-width: 0; }
-  input.w-num { width: 90px; }
-  label { font-size: 12px; color: var(--muted); }
-  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
-  .grid > div { display: flex; flex-direction: column; gap: 3px; }
-  .kv { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 8px; }
-  .kv div { background: var(--bg); border-radius: 6px; padding: 6px 8px; }
-  .kv b { display: block; font-size: 11px; color: var(--muted); font-weight: 500; }
-  .kv span { font-weight: 600; }
-  .scroll { max-height: 340px; overflow: auto; border: 1px solid var(--border); border-radius: 6px; }
-  table { width: 100%; border-collapse: collapse; font-size: 13px; }
-  th, td { text-align: left; padding: 4px 8px; border-bottom: 1px solid var(--border); white-space: nowrap; }
-  th { position: sticky; top: 0; background: var(--panel); }
-  td.num { text-align: right; font-variant-numeric: tabular-nums; }
-  pre.log { margin: 0; background: var(--code-bg); color: var(--code-text); padding: 8px; border-radius: 6px;
-            height: 320px; overflow: auto; font: 12px/1.4 ui-monospace, Consolas, monospace; white-space: pre-wrap; word-break: break-all; }
-  .tx { color: #93c5fd; } .ok { color: #86efac; } .er { color: #fca5a5; } .sys { color: #94a3b8; }
-  .warnbox { background: var(--bg); border-left: 3px solid var(--warn); padding: 8px 10px; margin: 8px 16px 0;
-             border-radius: 4px; max-width: 1368px; }
-  @media (min-width: 1400px) { .warnbox { margin: 8px auto 0; } }
-  .hidden { display: none; }
+  html, body { margin: 0; }
+  body { background: var(--bg); color: var(--text); font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  button, input, select { font: inherit; color: inherit; }
+  code, .mono { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: .92em; }
+
+  /* Header */
+  .top { position: sticky; top: 0; z-index: 5; background: var(--panel); border-bottom: 1px solid var(--border); }
+  .top-row { display: flex; align-items: center; gap: 12px; padding: 10px 16px; max-width: 1100px; margin: 0 auto; flex-wrap: wrap; }
+  .brand { font-weight: 650; font-size: 16px; margin-right: auto; }
+  .chip { display: inline-flex; align-items: center; gap: 8px; padding: 4px 10px; border-radius: 999px; background: var(--raised); border: 1px solid var(--border); font-size: 13px; color: var(--muted); max-width: 100%; }
+  .chip .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); flex: none; }
+  .chip.on { color: var(--text); } .chip.on .dot { background: var(--ok); }
+  .tabs { display: flex; gap: 2px; padding: 0 12px; max-width: 1100px; margin: 0 auto; overflow-x: auto; scrollbar-width: none; }
+  .tabs button { border: 0; background: none; padding: 10px 12px; border-bottom: 2px solid transparent; color: var(--muted); cursor: pointer; white-space: nowrap; font-weight: 550; }
+  .tabs button[aria-selected="true"] { color: var(--accent); border-bottom-color: var(--accent); }
+
+  main { max-width: 1100px; margin: 0 auto; padding: 16px; }
+  .panel { display: none; gap: 16px; }
+  .panel.active { display: grid; }
+  @media (min-width: 860px) { .panel.two { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } .span { grid-column: 1 / -1; } }
+
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; min-width: 0; }
+  .card h2 { font-size: 15px; margin: 0 0 4px; }
+  .card .sub { color: var(--muted); font-size: 13px; margin: 0 0 12px; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .row + .row { margin-top: 10px; }
+  .grow { flex: 1 1 180px; min-width: 0; }
+
+  .btn { padding: 8px 14px; border-radius: 8px; border: 1px solid var(--border); background: var(--panel); cursor: pointer; font-weight: 550; min-height: 38px; }
+  .btn:hover:not(:disabled) { border-color: var(--accent); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+  .btn.danger { color: var(--bad); }
+  .btn.small { padding: 4px 10px; min-height: 30px; font-size: 13px; }
+  .btn:disabled { opacity: .45; cursor: not-allowed; }
+  .btn:focus-visible, input:focus-visible, select:focus-visible, .tabs button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  label.f { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); min-width: 0; }
+  input[type=text], input[type=password], input[type=number], input:not([type]), select {
+    padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--raised); min-height: 38px; width: 100%; min-width: 0; }
+  input.changed { border-color: var(--warn); }
+  .fields { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px; }
+  .hint { font-size: 12.5px; color: var(--muted); margin-top: 8px; }
+  .result { font-size: 13px; margin-top: 8px; min-height: 1em; }
+  .result.ok { color: var(--ok); } .result.bad { color: var(--bad); }
+
+  .kv { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+  .kv div { background: var(--raised); border-radius: 8px; padding: 8px 10px; min-width: 0; }
+  .kv b { display: block; font-size: 12px; color: var(--muted); font-weight: 500; }
+  .kv span { font-weight: 600; overflow-wrap: anywhere; }
+
+  .checks { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+  .check { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; align-items: start; padding: 10px 12px; border-radius: 8px; background: var(--raised); }
+  .badge { font-size: 11.5px; font-weight: 700; letter-spacing: .03em; padding: 2px 8px; border-radius: 999px; text-transform: uppercase; white-space: nowrap; }
+  .s-ok .badge { background: var(--ok-soft); color: var(--ok); }
+  .s-warn .badge { background: var(--warn-soft); color: var(--warn); }
+  .s-fail .badge { background: var(--bad-soft); color: var(--bad); }
+  .s-info .badge, .s-unknown .badge { background: var(--info-soft); color: var(--info); }
+  .check .t { font-weight: 600; }
+  .check .d { font-size: 13.5px; color: var(--muted); overflow-wrap: anywhere; }
+  .summary { font-weight: 600; margin: 0 0 12px; }
+
+  .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 8px; }
+  .tile { background: var(--raised); border-radius: 8px; padding: 10px 12px; }
+  .tile b { display: block; font-size: 12px; color: var(--muted); font-weight: 500; }
+  .tile span { font-size: 18px; font-weight: 650; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+  .tile small { color: var(--muted); font-size: 12px; margin-left: 3px; }
+
+  .tablewrap { overflow: auto; max-height: 420px; border: 1px solid var(--border); border-radius: 8px; margin-top: 10px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  th, td { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--border); }
+  th { position: sticky; top: 0; background: var(--panel); font-weight: 600; color: var(--muted); font-size: 12.5px; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  td.obis { white-space: nowrap; color: var(--muted); }
+  .empty { color: var(--muted); padding: 14px 10px; }
+
+  .note { background: var(--warn-soft); color: var(--text); border-left: 3px solid var(--warn); padding: 8px 12px; border-radius: 6px; font-size: 13.5px; }
+  .note.info { background: var(--info-soft); border-left-color: var(--info); }
+  .banner { max-width: 1100px; margin: 12px auto 0; padding: 0 16px; }
+
+  pre.log { margin: 10px 0 0; background: var(--code-bg); color: var(--code-text); padding: 10px; border-radius: 8px; height: 380px; overflow: auto;
+            font: 12.5px/1.45 ui-monospace, "Cascadia Mono", Consolas, monospace; white-space: pre-wrap; word-break: break-word; }
+  .l-tx { color: var(--code-tx); } .l-ok { color: var(--code-ok); } .l-bad { color: var(--code-bad); } .l-sys { color: var(--code-sys); }
+
+  .busy { position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%); z-index: 10; background: var(--panel); border: 1px solid var(--border);
+          box-shadow: 0 6px 24px rgba(0,0,0,.18); border-radius: 999px; padding: 8px 8px 8px 16px; display: none; align-items: center; gap: 10px; max-width: calc(100% - 32px); font-size: 13.5px; }
+  .busy.show { display: flex; }
+  .spin { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--border); border-top-color: var(--accent); animation: spin 0.9s linear infinite; flex: none; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { .spin { animation: none; } }
+  .hidden { display: none !important; }
+  @media (max-width: 520px) { main { padding: 12px; } .card { padding: 14px; } .check { grid-template-columns: auto minmax(0, 1fr); } .check .act { grid-column: 2; } }
 </style>
 </head>
 <body>
-<header>
-  <h1>AMR BLE Configurator</h1>
-  <button id="btnConnect" class="primary">Connect</button>
-  <button id="btnDisconnect" disabled>Disconnect</button>
-  <span class="dot" id="dot"></span><span id="connState">Not connected</span>
+<header class="top">
+  <div class="top-row">
+    <div class="brand">AMR BLE Configurator</div>
+    <span class="chip" id="chip"><span class="dot"></span><span id="chipText">Not connected</span></span>
+    <button class="btn primary" id="btnConnect">Connect</button>
+    <button class="btn hidden" id="btnDisconnect">Disconnect</button>
+  </div>
+  <nav class="tabs" role="tablist" aria-label="Sections">
+    <button role="tab" data-tab="overview" aria-selected="true">Overview</button>
+    <button role="tab" data-tab="meter" aria-selected="false">Meter</button>
+    <button role="tab" data-tab="settings" aria-selected="false">Settings</button>
+    <button role="tab" data-tab="passwords" aria-selected="false">Meter passwords</button>
+    <button role="tab" data-tab="console" aria-selected="false">Console</button>
+  </nav>
 </header>
-<div id="noBle" class="warnbox hidden">
-  Web Bluetooth isn't available here. Open this file in Chrome or Edge on desktop or Android
-  (from <code>file://</code> or <code>http://localhost</code>). On Linux, enable
-  <code>chrome://flags/#enable-experimental-web-platform-features</code>.
-</div>
+<div class="banner hidden" id="banner"></div>
 
 <main>
-  <!-- ── Meter service (ble_meter.h) ─────────────────────────────────── -->
-  <section>
-    <h2>Meter service</h2>
-    <p class="sub">JSON commands on 4fafc201…, readings on the data characteristic, status on the status characteristic.</p>
-
-    <div class="row">
-      <button data-meter='{"cmd":"read"}'>Read meter now</button>
-      <button data-meter='{"cmd":"get"}'>Get last reading</button>
-      <button data-meter='{"cmd":"status"}'>Refresh status</button>
+  <!-- ── Overview: G1 identity, G2 installation check, G6 maintenance, G7 report ── -->
+  <section class="panel two active" id="tab-overview" role="tabpanel">
+    <div class="card span">
+      <h2>Installation check</h2>
+      <p class="sub">From the device status and its last meter read. Refreshed after every change.</p>
+      <p class="summary" id="checkSummary">Connect to a device to check it.</p>
+      <ul class="checks" id="checks"></ul>
+      <div class="row" style="margin-top:12px">
+        <button class="btn" id="btnRefresh">Refresh status</button>
+        <button class="btn" id="btnReport">Download report</button>
+      </div>
     </div>
-
-    <h3>Status</h3>
-    <div class="kv" id="status">
-      <div><b>State</b><span id="stState">–</span></div>
-      <div><b>Return code</b><span id="stRet">–</span></div>
-      <div><b>Values</b><span id="stN">–</span></div>
-      <div><b>Age</b><span id="stAge">–</span></div>
-      <div><b>Read interval</b><span id="stInterval">–</span></div>
-      <div><b>Profile interval</b><span id="stProfile">–</span></div>
+    <div class="card">
+      <h2>Device</h2>
+      <p class="sub">Compare IMEI and key fingerprint with the OTA dashboard before approving a device.</p>
+      <div class="kv" id="ident"><div><b>Status</b><span>Not read yet</span></div></div>
     </div>
-
-    <h3>Intervals</h3>
-    <div class="row">
-      <label for="inInterval">Reading (s, 30–86400)</label>
-      <input id="inInterval" class="w-num" type="number" min="30" max="86400" value="900">
-      <button id="btnInterval">Set</button>
-      <label for="inProfile">Profile (min, divides 1440)</label>
-      <input id="inProfile" class="w-num" type="number" min="5" max="1440" value="30">
-      <button id="btnProfile">Set</button>
-    </div>
-
-    <h3>Reading <span id="rdInfo" style="text-transform:none"></span></h3>
-    <div class="scroll">
-      <table>
-        <thead><tr><th>OBIS</th><th>Name</th><th style="text-align:right">Value</th><th>Unit</th></tr></thead>
-        <tbody id="rdBody"><tr><td colspan="4" class="sys" style="color:var(--muted)">No reading yet</td></tr></tbody>
-      </table>
+    <div class="card">
+      <h2>Maintenance</h2>
+      <p class="sub">The device runs these between meter reads.</p>
+      <div class="row">
+        <button class="btn" id="btnOta">Check for firmware update</button>
+        <button class="btn danger" id="btnReboot">Reboot device</button>
+      </div>
+      <p class="hint">Rebooting loses readings that are waiting for upload. Clearing the profile markers is only possible over the USB serial port.</p>
+      <div class="result" id="maintResult"></div>
     </div>
   </section>
 
-  <!-- ── Command service (ota_ble.ino → commands.ino) ────────────────── -->
-  <section>
-    <h2>Command console</h2>
-    <p class="sub">Text commands on the Nordic UART service 6e400001…. SET and METER_PW changes need the device key once the device has one.</p>
+  <!-- ── Meter: G3 ── -->
+  <section class="panel" id="tab-meter" role="tabpanel">
+    <div class="card">
+      <h2>Meter</h2>
+      <p class="sub">Reads every value the meter offers over RS-232. A full read takes from a few seconds to a few minutes.</p>
+      <div class="tiles" id="meterState"></div>
+      <div class="row" style="margin-top:12px">
+        <button class="btn primary" id="btnRead">Read meter now</button>
+        <button class="btn" id="btnCached">Show last reading</button>
+      </div>
+      <p class="hint">If the meter refuses the saved password, "Read meter now" also tries the other passwords. Some meters lock their port after several wrong passwords.</p>
+    </div>
+    <div class="card">
+      <h2>Key values <span class="sub" id="readInfo" style="font-weight:400"></span></h2>
+      <div class="tiles" id="keyValues"><div class="empty">No reading yet.</div></div>
+      <div class="row" style="margin-top:12px">
+        <input id="filter" class="grow" placeholder="Filter by OBIS code or name" aria-label="Filter values">
+      </div>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>OBIS</th><th>Name</th><th style="text-align:right">Value</th><th>Unit</th></tr></thead>
+          <tbody id="values"><tr><td colspan="4" class="empty">No reading yet.</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
 
-    <div class="row">
-      <label for="inAuth">Device key (auth)</label>
-      <input id="inAuth" type="password" placeholder="64 hex chars; empty if not provisioned" style="flex:1; min-width:200px" autocomplete="off">
-      <button id="btnShowKey" title="Show/hide">Show</button>
+  <!-- ── Settings: G4 ── -->
+  <section class="panel two" id="tab-settings" role="tabpanel">
+    <div class="card span">
+      <h2>Device key</h2>
+      <p class="sub">Needed for network, server and password changes once the device has a key. Kept on this page only until you close it.</p>
+      <div class="row">
+        <input id="auth" type="password" class="grow" placeholder="64 hex characters (empty if the device has no key yet)" autocomplete="off" spellcheck="false" aria-label="Device key">
+        <button class="btn" id="btnShowAuth">Show</button>
+      </div>
+      <div class="note" style="margin-top:10px">The Bluetooth link is not encrypted: the key can be overheard by a receiver nearby. Use it only on site, and only when a change needs it.</div>
     </div>
 
-    <div class="row">
-      <button data-cmd="HELP">HELP</button>
-      <button data-cmd="GET_STATUS">GET_STATUS</button>
-      <button data-cmd="CHECK_OTA">CHECK_OTA</button>
-      <button data-cmd="REBOOT" class="danger" data-confirm="Reboot the device?">REBOOT</button>
+    <div class="card">
+      <h2>Read schedule</h2>
+      <p class="sub">Meter readings and profile reads, aligned to the meter clock. No key needed.</p>
+      <div class="fields">
+        <label class="f">Meter readings every (s)
+          <input id="inRead" type="number" min="30" max="86400" step="1" inputmode="numeric">
+        </label>
+        <label class="f">Profiles every (min)
+          <select id="inProfile"></select>
+        </label>
+      </div>
+      <div class="row" style="margin-top:10px"><button class="btn primary" id="btnSchedule">Save schedule</button></div>
+      <p class="hint">Readings: 30 to 86 400 s. Profiles: minutes that divide a day, so reads land at the same times every day.</p>
+      <div class="result" id="scheduleResult"></div>
     </div>
 
-    <h3>Device status <span id="devUpdated" style="text-transform:none"></span></h3>
-    <div class="kv" id="devStatus"><div><b>–</b><span>Click GET_STATUS</span></div></div>
-
-    <h3>SET</h3>
-    <div class="grid">
-      <div><label for="sHost">host</label><input id="sHost" placeholder="65.20.77.137"></div>
-      <div><label for="sPort">port</label><input id="sPort" type="number" placeholder="7000"></div>
-      <div><label for="sApn">apn</label><input id="sApn" placeholder="airtelgprs.com"></div>
-      <div><label for="sInterval">interval (OTA check, s)</label><input id="sInterval" type="number" placeholder="86400"></div>
-      <div><label for="sRead">read (s)</label><input id="sRead" type="number" placeholder="900"></div>
-      <div><label for="sProfile">profile (min)</label><input id="sProfile" type="number" placeholder="30"></div>
-      <div style="grid-column: 1 / -1"><label for="sSecret">secret (new device key, 64 hex)</label><input id="sSecret" type="password" autocomplete="off"></div>
-    </div>
-    <div class="row"><button id="btnSet" class="primary">Send SET</button><span class="sub" style="margin:0">Loaded from GET_STATUS. Only changed fields (orange) are sent.</span></div>
-
-    <h3>Meter passwords</h3>
-    <div class="row">
-      <button data-cmd="METER_PW LIST">LIST</button>
-      <input id="pwAdd" type="password" placeholder="new password" autocomplete="off" style="width:160px">
-      <button id="btnPwAdd">ADD</button>
-      <input id="pwDel" type="number" min="1" max="8" placeholder="#" class="w-num" style="width:60px">
-      <button id="btnPwDel">DEL</button>
-      <button data-cmd="METER_PW DETECT" data-auth="1">DETECT</button>
-      <button data-cmd="METER_PW CLEAR" data-auth="1" class="danger" data-confirm="Replace the list with the default passwords?">CLEAR</button>
-    </div>
-    <div class="row">
-      <button id="btnDetectNow" class="primary">Detect password now</button>
-      <span class="sub" style="margin:0">Forgets the saved password, then reads the meter so every password is tried.</span>
+    <div class="card">
+      <h2>Mobile network (APN)</h2>
+      <p class="sub" id="apnNow">APN in use: unknown.</p>
+      <div class="row">
+        <label class="row" style="gap:6px"><input type="radio" name="apnMode" value="auto" id="apnAuto"> Automatic from the SIM</label>
+        <label class="row" style="gap:6px"><input type="radio" name="apnMode" value="fixed" id="apnFixed"> Fixed APN</label>
+      </div>
+      <div class="row"><input id="inApn" class="grow" placeholder="e.g. airtelgprs.com, jionet, bsnlnet" spellcheck="false" aria-label="APN"></div>
+      <div class="row" style="margin-top:10px"><button class="btn primary" id="btnApn">Save APN</button></div>
+      <p class="hint">Automatic picks Airtel, Jio or BSNL from the SIM and remembers what worked. IoT/M2M SIMs need their fixed APN. Takes effect at the next connection, before the next upload.</p>
+      <div class="result" id="apnResult"></div>
     </div>
 
-    <h3>Console</h3>
-    <div class="row">
-      <input id="inRaw" placeholder="Any command, e.g. GET_STATUS" style="flex:1; min-width:200px">
-      <button id="btnRaw" class="primary">Send</button>
-      <button id="btnClear">Clear log</button>
+    <div class="card">
+      <h2>Firmware update server</h2>
+      <p class="sub">Where the device asks for updates and registers. Change only when told to.</p>
+      <div class="fields">
+        <label class="f">Host <input id="inHost" spellcheck="false"></label>
+        <label class="f">Port <input id="inPort" type="number" min="1" max="65535" inputmode="numeric"></label>
+        <label class="f">Check every (s) <input id="inInterval" type="number" min="300" max="2592000" inputmode="numeric"></label>
+      </div>
+      <div class="row" style="margin-top:10px"><button class="btn primary" id="btnServer">Save server</button></div>
+      <p class="hint">The server may set its own check interval for this device. The device rejects any update the real server did not sign.</p>
+      <div class="result" id="serverResult"></div>
     </div>
-    <pre class="log" id="log"></pre>
+
+    <div class="card">
+      <h2>Install a device key</h2>
+      <p class="sub">Only when automatic registration is off. Normally the device gets its key once the OTA dashboard approves it.</p>
+      <div class="row"><input id="inSecret" type="password" class="grow" placeholder="New device key, 64 hex characters" autocomplete="off" spellcheck="false" aria-label="New device key"></div>
+      <div class="row" style="margin-top:10px"><button class="btn primary" id="btnSecret">Install key</button></div>
+      <div class="result" id="secretResult"></div>
+    </div>
+  </section>
+
+  <!-- ── Passwords: G5 ── -->
+  <section class="panel two" id="tab-passwords" role="tabpanel">
+    <div class="card span">
+      <h2>Meter passwords</h2>
+      <p class="sub" id="pwStatus">The device tries these LLS passwords in order and keeps the one the meter accepts. They are shown masked.</p>
+      <div class="tablewrap" style="max-height:none">
+        <table>
+          <thead><tr><th>#</th><th>Password</th><th>State</th><th></th></tr></thead>
+          <tbody id="pwBody"><tr><td colspan="4" class="empty">Not loaded.</td></tr></tbody>
+        </table>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <button class="btn" id="btnPwList">Reload list</button>
+        <button class="btn danger" id="btnPwClear">Restore default list</button>
+      </div>
+      <div class="result" id="pwResult"></div>
+    </div>
+    <div class="card">
+      <h2>Add a password</h2>
+      <div class="row"><input id="inPw" type="password" class="grow" placeholder="1 to 16 printable characters, no spaces" autocomplete="off" spellcheck="false" aria-label="New meter password">
+        <button class="btn primary" id="btnPwAdd">Add</button></div>
+      <p class="hint">Added at the end of the list (at most 8).</p>
+    </div>
+    <div class="card">
+      <h2>Find the right password</h2>
+      <p class="sub">Forgets the saved match. "Find now" then reads the meter so every password is tried once.</p>
+      <div class="row">
+        <button class="btn primary" id="btnDetectNow">Find now</button>
+        <button class="btn" id="btnDetect">At next scheduled read</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Console: any command, the session log ── -->
+  <section class="panel" id="tab-console" role="tabpanel">
+    <div class="card">
+      <h2>Console</h2>
+      <p class="sub">Any command (HELP lists them). Keys and passwords are masked in this log.</p>
+      <div class="row">
+        <input id="inRaw" class="grow" placeholder="e.g. GET_STATUS" spellcheck="false" aria-label="Command">
+        <button class="btn primary" id="btnRaw">Send</button>
+      </div>
+      <div class="row">
+        <button class="btn small" id="btnCopyLog">Copy log</button>
+        <button class="btn small" id="btnSaveLog">Download log</button>
+        <button class="btn small" id="btnClearLog">Clear</button>
+      </div>
+      <pre class="log" id="log" aria-live="polite"></pre>
+    </div>
   </section>
 </main>
 
+<div class="busy" id="busy" role="status"><span class="spin"></span><span id="busyText">Waiting for the device…</span><button class="btn small" id="btnBusyCancel">Stop waiting</button></div>
+
 <script>
 "use strict";
-const METER_SVC   = "4fafc201-1fb5-459e-8fcc-c5c9c331914b";
-const METER_CMD   = "beb5483e-36e1-4688-b7f5-ea07361b26a8";
-const METER_DATA  = "beb5483e-36e1-4688-b7f5-ea07361b26a9";
-const METER_STAT  = "beb5483e-36e1-4688-b7f5-ea07361b26aa";
-const UART_SVC    = "6e400001-b5a3-f393-e0a9-e50e24dcca9e";
-const UART_RX     = "6e400002-b5a3-f393-e0a9-e50e24dcca9e"; // phone -> device
-const UART_TX     = "6e400003-b5a3-f393-e0a9-e50e24dcca9e"; // device -> phone
-const CMD_MAX     = 200;  // ota_ble.ino truncates longer writes
+// ═══════════════════════════════════════════════════════════════════════════
+//  Firmware interface (firmware/ble_meter.h, ota_ble.ino, commands.ino)
+// ═══════════════════════════════════════════════════════════════════════════
+const UUID = {
+  meterSvc: "4fafc201-1fb5-459e-8fcc-c5c9c331914b",
+  meterCmd: "beb5483e-36e1-4688-b7f5-ea07361b26a8",
+  meterData: "beb5483e-36e1-4688-b7f5-ea07361b26a9",
+  meterStatus: "beb5483e-36e1-4688-b7f5-ea07361b26aa",
+  uartSvc: "6e400001-b5a3-f393-e0a9-e50e24dcca9e",
+  uartRx: "6e400002-b5a3-f393-e0a9-e50e24dcca9e",   // page -> device
+  uartTx: "6e400003-b5a3-f393-e0a9-e50e24dcca9e",   // device -> page
+};
+const CMD_MAX = 200;              // ota_ble.ino cuts longer lines
+const REPLY_QUIET_MS = 800;       // no end marker: a reply is done after this much silence
+const REPLY_WAIT_MS = 180000;     // the device answers between read cycles; give up after this
+const BUSY_AFTER_MS = 2500;       // show the "waiting" bar after this long without an answer
 
-const $ = id => document.getElementById(id);
+// nvs_config.ino cfg_set rules
+const RULES = {
+  read: (v) => Number.isInteger(v) && v >= 30 && v <= 86400,
+  profile: (v) => Number.isInteger(v) && v >= 5 && v <= 1440 && 1440 % v === 0,
+  port: (v) => Number.isInteger(v) && v >= 1 && v <= 65535,
+  interval: (v) => Number.isInteger(v) && v >= 300 && v <= 2592000,
+  host: (s) => s.length > 0 && s.length <= 64 && !/["\s]/.test(s),
+  apn: (s) => s.length > 0 && s.length <= 63 && !/["\s]/.test(s),
+  secret: (s) => /^[0-9a-fA-F]{64}$/.test(s),
+  meterPw: (s) => s.length >= 1 && s.length <= 16 && /^[\x21-\x7e]+$/.test(s),
+};
+const PROFILE_MINUTES = [];
+for (let m = 5; m <= 1440; m++) if (1440 % m === 0) PROFILE_MINUTES.push(m);
+
+// DLMS return codes the meter status can carry (firmware/include/errorcodes.h).
+function retText(ret) {
+  const code = ret & 0xffff;
+  const known = {
+    0: "OK",
+    3: "access denied by the meter",
+    4: "object not in this meter",
+    252: "meter did not answer (check the RS-232 cable, the meter port and DTR)",
+    253: "meter stopped answering (timeout; check the cable and the meter port)",
+    260: "device out of memory",
+    269: "corrupted reply (CRC error; check the cable and earthing)",
+    270: "invalid or empty reply from the meter",
+    273: "meter refused the association (usually a wrong password)",
+    274: "meter refused the association for now (try again later)",
+    275: "meter refused the association (usually a wrong password)",
+    276: "meter does not support this association",
+    279: "meter rejected the password",
+    280: "meter needs a password",
+  };
+  return known[code] ? `${known[code]} (code ${ret})` : `DLMS error ${ret}`;
+}
+const isPasswordError = (ret) => [273, 275, 279, 280].includes(ret & 0xffff);
+const isLinkError = (ret) => [252, 253].includes(ret & 0xffff);
+
+// Values shown on top of the meter tab, by OBIS code (firmware/obis_names.h).
+const KEY_VALUES = [
+  ["0.0.96.1.0.255", "Meter serial"], ["0.0.1.0.0.255", "Meter clock"],
+  ["1.0.32.7.0.255", "Voltage R"], ["1.0.52.7.0.255", "Voltage Y"], ["1.0.72.7.0.255", "Voltage B"], ["1.0.12.7.0.255", "Voltage"],
+  ["1.0.31.7.0.255", "Current R"], ["1.0.51.7.0.255", "Current Y"], ["1.0.71.7.0.255", "Current B"], ["1.0.11.7.0.255", "Current"],
+  ["1.0.1.7.0.255", "Active power"], ["1.0.13.7.0.255", "Power factor"], ["1.0.14.7.0.255", "Frequency"],
+  ["1.0.1.8.0.255", "Energy import"], ["1.0.9.8.0.255", "Apparent energy"],
+];
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  Page state
+// ═══════════════════════════════════════════════════════════════════════════
+const $ = (id) => document.getElementById(id);
 const enc = new TextEncoder(), dec = new TextDecoder();
-let device = null, ch = {};
-let dataBuf = "", uartBuf = "", uartTimer = null;
-let rows = [], rowsSrc = "";
-let queue = Promise.resolve();   // GATT allows one operation at a time
-let detectThenRead = false;      // "Detect password now": read once DETECT says OK
-let refreshAfterSet = false, refreshTimer = null;   // GET_STATUS once the SET reply is in
+const DEMO = new URLSearchParams(location.search).has("demo");
 
-// ── Log ──────────────────────────────────────────────────────────────────
+const S = {
+  link: null,            // BleLink or DemoLink while connected
+  name: "",
+  status: {},            // GET_STATUS key -> value
+  statusLines: [],
+  statusAt: 0,
+  meter: null,           // meter status characteristic JSON
+  rows: [], rowsSrc: "", rowsDone: false, rowsRet: null,
+  passwords: [],         // [{n, masked, state}]
+  lastReadAt: 0,
+  detectThenRead: false,
+};
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  Log (masked)
+// ═══════════════════════════════════════════════════════════════════════════
+const logLines = [];
+function mask(text) {
+  return String(text).replace(/(auth=|secret=)\S+/gi, "$1••••").replace(/^(METER_PW\s+ADD\s+)\S+/i, "$1••••");
+}
 function log(text, cls = "") {
   const el = $("log");
   const atEnd = el.scrollTop + el.clientHeight >= el.scrollHeight - 4;
   const t = new Date().toLocaleTimeString();
   for (const line of String(text).split("\n")) {
-    if (!line && cls !== "") continue;
+    if (!line.trim()) continue;
+    const c = cls || (/^(ERR|BUSY)/.test(line) ? "l-bad" : /^OK/.test(line) ? "l-ok" : "");
+    logLines.push(`${t}  ${line}`);
     const span = document.createElement("span");
-    span.className = cls || (/^ERR|^BUSY/.test(line) ? "er" : /^OK/.test(line) ? "ok" : "");
+    if (c) span.className = c;
     span.textContent = `${t}  ${line}\n`;
     el.appendChild(span);
   }
   if (atEnd) el.scrollTop = el.scrollHeight;
 }
-// Never show the device key or meter passwords in the log.
-function maskCmd(cmd) {
-  return cmd.replace(/(auth=|secret=)\S+/gi, "$1••••").replace(/^(METER_PW\s+ADD\s+)\S+/i, "$1••••");
+
+// "2026-10-30_1645" in local time, for file names.
+function stamp(d) {
+  const p = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}`;
 }
 
-// ── Connection ───────────────────────────────────────────────────────────
-// Buttons stay clickable; sendMeter()/sendCmd() say why when they can't send.
-function setConnected(on, name = "") {
-  $("dot").classList.toggle("on", on);
-  $("connState").textContent = on ? `Connected: ${name}` : "Not connected";
-  $("btnConnect").disabled = on;
-  $("btnDisconnect").disabled = !on;
+function download(name, text) {
+  const url = URL.createObjectURL(new Blob([text], { type: "text/plain;charset=utf-8" }));
+  const a = Object.assign(document.createElement("a"), { href: url, download: name });
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-// Why Web Bluetooth can't be used here, or "" when it can.
+function setResult(id, text, ok) {
+  const el = $(id);
+  el.textContent = text;
+  el.className = `result ${ok === true ? "ok" : ok === false ? "bad" : ""}`;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  Links: real Bluetooth and the simulated demo device
+// ═══════════════════════════════════════════════════════════════════════════
 function bleProblem() {
-  if (!window.isSecureContext)
-    return "This page isn't a secure context. Open it from file:// or http://localhost, not a network address.";
-  if (!navigator.bluetooth)
-    return "This browser has no Web Bluetooth. Use Chrome or Edge on Windows, macOS or Android.";
+  if (!window.isSecureContext) return "This page is not in a secure context. Open it from file:// or http://localhost, not a network address.";
+  if (!navigator.bluetooth) return "This browser has no Web Bluetooth. Use Chrome or Edge on Windows, macOS or Android.";
   return "";
 }
 
-async function connect() {
-  const problem = bleProblem();
-  if (problem) { log(problem, "er"); return; }
-  try {
+class BleLink {
+  constructor(handlers) { this.h = handlers; this.ops = Promise.resolve(); this.ch = {}; }
+  async connect() {
     if (navigator.bluetooth.getAvailability && !(await navigator.bluetooth.getAvailability())) {
-      log("Bluetooth is off or this PC has no Bluetooth adapter.", "er");
-      return;
+      throw new Error("Bluetooth is off or this computer has no Bluetooth adapter.");
     }
-    device = await navigator.bluetooth.requestDevice({
-      filters: [{ services: [METER_SVC] }, { namePrefix: "DLMS-Meter-" }],
-      optionalServices: [METER_SVC, UART_SVC],
+    this.device = await navigator.bluetooth.requestDevice({
+      filters: [{ services: [UUID.meterSvc] }, { namePrefix: "DLMS-Meter-" }],
+      optionalServices: [UUID.meterSvc, UUID.uartSvc],
     });
-    device.addEventListener("gattserverdisconnected", onDisconnected);
-    log(`Connecting to ${device.name || device.id}…`, "sys");
-    const server = await device.gatt.connect();
-    ch = {};
-
+    this.name = this.device.name || this.device.id;
+    this.device.addEventListener("gattserverdisconnected", () => this.h.onClose());
+    log(`Connecting to ${this.name}…`, "l-sys");
+    const server = await this.device.gatt.connect();
     try {
-      const svc = await server.getPrimaryService(METER_SVC);
-      ch.meterCmd = await svc.getCharacteristic(METER_CMD);
-      ch.meterData = await svc.getCharacteristic(METER_DATA);
-      ch.meterStat = await svc.getCharacteristic(METER_STAT);
-      ch.meterData.addEventListener("characteristicvaluechanged", e => onData(dec.decode(e.target.value)));
-      ch.meterStat.addEventListener("characteristicvaluechanged", e => onStatus(dec.decode(e.target.value)));
-      await ch.meterData.startNotifications();
-      await ch.meterStat.startNotifications();
-      onStatus(dec.decode(await ch.meterStat.readValue()));
-      log("Meter service ready", "sys");
-    } catch (e) { log(`Meter service not found: ${e.message}`, "er"); ch.meterCmd = null; }
-
+      const svc = await server.getPrimaryService(UUID.meterSvc);
+      this.ch.meterCmd = await svc.getCharacteristic(UUID.meterCmd);
+      const data = await svc.getCharacteristic(UUID.meterData);
+      const status = await svc.getCharacteristic(UUID.meterStatus);
+      data.addEventListener("characteristicvaluechanged", (e) => this.h.onMeterData(dec.decode(e.target.value)));
+      status.addEventListener("characteristicvaluechanged", (e) => this.h.onMeterStatus(dec.decode(e.target.value)));
+      await data.startNotifications();
+      await status.startNotifications();
+      this.h.onMeterStatus(dec.decode(await status.readValue()));
+    } catch (e) { log(`Meter service not found: ${e.message}`, "l-bad"); }
     try {
-      const svc = await server.getPrimaryService(UART_SVC);
-      ch.uartRx = await svc.getCharacteristic(UART_RX);
-      ch.uartTx = await svc.getCharacteristic(UART_TX);
-      ch.uartTx.addEventListener("characteristicvaluechanged", e => onUart(dec.decode(e.target.value)));
-      await ch.uartTx.startNotifications();
-      log("Command service ready", "sys");
-    } catch (e) { log(`Command service not found (OTA_BLE_ENABLE=0?): ${e.message}`, "er"); ch.uartRx = null; }
+      const svc = await server.getPrimaryService(UUID.uartSvc);
+      this.ch.uartRx = await svc.getCharacteristic(UUID.uartRx);
+      const tx = await svc.getCharacteristic(UUID.uartTx);
+      tx.addEventListener("characteristicvaluechanged", (e) => this.h.onCmdText(dec.decode(e.target.value)));
+      await tx.startNotifications();
+    } catch (e) { log(`Command service not found (firmware built with OTA_BLE_ENABLE 0?): ${e.message}`, "l-bad"); }
+  }
+  get hasMeter() { return !!this.ch.meterCmd; }
+  get hasCmd() { return !!this.ch.uartRx; }
+  write(c, text) {
+    // GATT allows one operation at a time.
+    this.ops = this.ops.then(() => c.writeValueWithResponse(enc.encode(text)))
+      .catch((e) => log(`Write failed: ${e.message}`, "l-bad"));
+    return this.ops;
+  }
+  meter(json) { return this.write(this.ch.meterCmd, json); }
+  cmd(text) { return this.write(this.ch.uartRx, text); }
+  disconnect() { if (this.device && this.device.gatt.connected) this.device.gatt.disconnect(); }
+}
 
-    setConnected(true, device.name || device.id);
-    if (ch.uartRx) sendCmd("GET_STATUS");
-  } catch (e) {
-    if (e.name !== "NotFoundError") log(`Connect failed: ${e.message}`, "er");
-    else log("No device chosen", "sys");
-    if (device && device.gatt.connected) device.gatt.disconnect();
+// A device that behaves like the firmware: one pending command, blocked while
+// it reads and uploads, the same reply lines. Device key: 64 × "a".
+class DemoLink {
+  constructor(handlers) {
+    this.h = handlers;
+    this.name = "DLMS-Meter-DEMO";
+    this.key = "a".repeat(64);
+    this.cfg = { host: "65.20.77.137", port: 7000, interval: 86400, apn: "auto", read: 900, profile: 30 };
+    this.pw = ["1***1", "H***o", "l***1", "1***D", "A***1", "l***t"];
+    this.pwActive = 1; this.pwMatched = true; this.pwForce = false;
+    this.meterState = { state: "idle", ret: 0, n: 0, age: -1 };
+    this.cache = [];
+    this.busyUntil = 0; this.pending = null;
+    this.readAt = 0;
+  }
+  async connect() { log(`Connecting to ${this.name} (simulated)…`, "l-sys"); await sleep(400); this.publish(); }
+  get hasMeter() { return true; }
+  get hasCmd() { return true; }
+  disconnect() { setTimeout(() => this.h.onClose(), 50); }
+  publish() {
+    const age = this.readAt ? Math.round((Date.now() - this.readAt) / 1000) : -1;
+    this.h.onMeterStatus(JSON.stringify({ t: "status", ...this.meterState, n: this.cache.length, age, interval: this.cfg.read, profile: this.cfg.profile }));
+  }
+  values() {
+    const j = (x, d) => +(x + (Math.random() - 0.5) * d).toFixed(3);
+    return [
+      ["0.0.96.1.0.255", "Meter Serial Number", null, null, "X1234567"], ["0.0.96.1.1.255", "Manufacturer Name", null, null, "DEMO METERS"],
+      ["0.0.1.0.0.255", "Clock", null, null, new Date().toISOString().slice(0, 19).replace("T", " ")],
+      ["1.0.32.7.0.255", "Voltage L1", j(231, 2), "V"], ["1.0.52.7.0.255", "Voltage L2", j(229, 2), "V"], ["1.0.72.7.0.255", "Voltage L3", j(233, 2), "V"],
+      ["1.0.31.7.0.255", "Current L1", j(4.2, .3), "A"], ["1.0.51.7.0.255", "Current L2", j(3.9, .3), "A"], ["1.0.71.7.0.255", "Current L3", j(4.6, .3), "A"],
+      ["1.0.13.7.0.255", "Power Factor", j(0.97, .02), ""], ["1.0.14.7.0.255", "Frequency", j(50, .05), "Hz"],
+      ["1.0.1.7.0.255", "Active Power", j(2.81, .1), "kW"], ["1.0.9.7.0.255", "Apparent Power", j(2.9, .1), "kVA"],
+      ["1.0.1.8.0.255", "Cumulative Energy kWh", 12873.42, "kWh"], ["1.0.9.8.0.255", "Cumulative Energy kVAh", 13311.07, "kVAh"],
+      ["1.0.1.6.0.255", "MD kW", 6.12, "kW"], ["0.0.96.7.0.255", "Power Failure Count", 41, ""], ["0.0.0.1.0.255", "Billing Count", 17, ""],
+    ].map(([obis, name, v, u, s]) => (s !== undefined ? { t: "r", obis, name, s } : { t: "r", obis, name, v, u }));
+  }
+  async stream(src, list) {
+    const send = (o) => this.h.onMeterData(JSON.stringify(o) + "\n");
+    send({ t: "begin", src });
+    for (const r of list) { await sleep(src === "meter" ? 110 : 15); send(r); }
+    send({ t: "end", ret: this.meterState.ret, n: list.length });
+  }
+  async meter(json) {
+    let m; try { m = JSON.parse(json); } catch { return; }
+    await sleep(60);
+    if (m.cmd === "read") {
+      if (this.pwForce || !this.pwMatched) { this.pwMatched = true; this.pwForce = false; }
+      this.busyUntil = Date.now() + 60000;
+      this.meterState.state = "reading"; this.publish();
+      const list = this.values();
+      await this.stream("meter", list);
+      this.cache = list; this.readAt = Date.now(); this.meterState = { state: "idle", ret: 0 }; this.publish();
+      this.busyUntil = Date.now() + 3500;   // then the upload
+      setTimeout(() => this.runPending(), 3600);
+    } else if (m.cmd === "get") {
+      this.stream("cache", this.cache);
+    } else if (m.cmd === "status") {
+      this.publish();
+    } else if (m.cmd === "interval") {
+      if (RULES.read(m.s)) this.cfg.read = m.s;
+      this.publish();
+    } else if (m.cmd === "profile") {
+      if (RULES.profile(m.m)) this.cfg.profile = m.m;
+      this.publish();
+    }
+  }
+  async cmd(text) {
+    await sleep(40);
+    if (this.pending) return;   // like ota_ble.ino: one command at a time
+    this.pending = text.slice(0, CMD_MAX);
+    if (Date.now() >= this.busyUntil) this.runPending();
+  }
+  async runPending() {
+    if (!this.pending || Date.now() < this.busyUntil) return;
+    const text = this.pending;
+    const reply = this.handle(text);
+    await sleep(120);
+    this.pending = null;
+    for (let i = 0; i < reply.length; i += 180) { this.h.onCmdText(reply.slice(i, i + 180)); await sleep(20); }
+  }
+  authOk(args) { const m = /auth=(\S+)/i.exec(args); return m && m[1].toLowerCase() === this.key; }
+  handle(line) {
+    const [cmd0, ...rest] = line.trim().split(/\s+/);
+    const cmd = (cmd0 || "").toUpperCase(), args = rest.join(" ");
+    const c = this.cfg;
+    if (cmd === "HELP") return "GET_STATUS | CHECK_OTA | SET key=value ... (host port secret interval apn=<apn>|auto read profile [auth=<key> over BLE]) | RESET_MARKS | METER_PW LIST|ADD <pw>|DEL <n>|CLEAR|DETECT | REBOOT\n";
+    if (cmd === "GET_STATUS" || cmd === "STATUS") {
+      const now = new Date(); const hm = (min) => { const d = new Date(Math.ceil((now.getTime() + 60000) / (min * 60000)) * min * 60000 + 60000); return d.toTimeString().slice(0, 5); };
+      return [
+        `fw=2.0.12 imei=868123456789012`,
+        `server=${c.host}:${c.port} key=set interval=${c.interval}s`,
+        `apn=${c.apn} apn_use=${c.apn === "auto" ? "jionet" : c.apn} apn_from=${c.apn === "auto" ? "operator" : "set"} operator=${c.apn === "auto" ? "jio" : "-"} sim=...4821`,
+        `read=${c.read}s profile=${c.profile}min next_read=${hm(c.read / 60)} next_profile=${hm(c.profile)}`,
+        `reg=provisioned`,
+        `meter_pw=#${this.pwActive + 1}/${this.pw.length} ${this.pwMatched ? "accepted" : "not confirmed"}${this.pwForce ? " search=next cycle" : ""}`,
+        `modem=ready busy=0 partition=app0`,
+        `last=no_update:up_to_date offer=- next_check_in=73012s`,
+      ].join("\n") + "\n";
+    }
+    if (cmd === "CHECK_OTA") return "OK check queued\n";
+    if (cmd === "REBOOT") { setTimeout(() => this.h.onClose(), 400); return "OK rebooting\n"; }
+    if (cmd === "RESET_MARKS") return "ERR RESET_MARKS is serial only\n";
+    if (cmd === "SET") {
+      if (!this.authOk(args)) return "ERR auth=<current device key> required over BLE\n";
+      let out = "";
+      for (const tok of args.split(/\s+/)) {
+        const eq = tok.indexOf("="); if (eq <= 0) continue;
+        const k = tok.slice(0, eq).toLowerCase(), v = tok.slice(eq + 1);
+        if (k === "auth") continue;
+        if (k === "secret") { out += RULES.secret(v) ? "OK secret=(saved)\n" : "ERR secret: secret must be the 64-hex-char device key\n"; continue; }
+        if (k === "apn") { c.apn = v.toLowerCase() === "auto" ? "auto" : v; out += `OK apn=${v}\n`; continue; }
+        if (["read", "profile", "port", "interval"].includes(k)) {
+          const n = Number(v);
+          if (!RULES[k](n)) { out += `ERR ${k}: out of range\n`; continue; }
+          c[k] = n; out += `OK ${k}=${v}\n`; continue;
+        }
+        if (k === "host") { c.host = v; out += `OK host=${v}\n`; continue; }
+        out += `ERR ${k}: unknown key '${k}'\n`;
+      }
+      return out;
+    }
+    if (cmd === "METER_PW") {
+      const words = args.split(/\s+/).filter((w) => w && !/^auth=/i.test(w));
+      const sub = (words[0] || "LIST").toUpperCase();
+      const list = () => this.pw.map((p, i) => `${i + 1}. ${p}${i === this.pwActive ? (this.pwMatched ? "  <- in use, accepted" : "  <- in use, not confirmed") : ""}`).join("\n") +
+        `\nmeter_pw=#${this.pwActive + 1}/${this.pw.length} ${this.pwMatched ? "accepted" : "not confirmed"}\n`;
+      if (sub === "LIST") return list();
+      if (!this.authOk(args)) return "ERR auth=<current device key> required over BLE\n";
+      if (sub === "ADD") { const pw = words[1] || ""; if (this.pw.length >= 8) return "ERR list full (8), delete one first\n"; this.pw.push(pw.length < 3 ? "***" : `${pw[0]}***${pw[pw.length - 1]}`); return `OK added ${this.pw[this.pw.length - 1]}\n`; }
+      if (sub === "DEL") { const n = Number(words[1]); if (!(n >= 1 && n <= this.pw.length)) return `ERR no password #${words[1]}\n`; this.pw.splice(n - 1, 1); if (this.pwActive >= this.pw.length) this.pwActive = 0; return `OK deleted #${n}\n`; }
+      if (sub === "CLEAR") { this.pw = ["1***1", "H***o", "l***1", "1***D", "A***1", "l***t"]; this.pwActive = 0; this.pwMatched = false; return "OK back to the default passwords\n"; }
+      if (sub === "DETECT") { this.pwActive = 0; this.pwMatched = false; this.pwForce = true; return "OK the next cycle tries the list from #1\n"; }
+      return "ERR unknown METER_PW command (LIST ADD DEL CLEAR DETECT)\n";
+    }
+    return `ERR unknown command '${cmd}' (try HELP)\n`;
   }
 }
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-function onDisconnected() {
-  log("Disconnected", "sys");
-  ch = {};
-  detectThenRead = false;
-  setConnected(false);
+// ═══════════════════════════════════════════════════════════════════════════
+//  Commands: one at a time, wait for the whole reply
+// ═══════════════════════════════════════════════════════════════════════════
+const Q = { items: [], active: null, buf: "" };
+
+function connected() { return !!S.link; }
+
+/** Send a command line; resolves to the reply lines ([] if the device did not answer). */
+function command(text, { label } = {}) {
+  text = text.trim();
+  if (!connected()) { log("Not connected. Click Connect first.", "l-bad"); return Promise.resolve(null); }
+  if (!S.link.hasCmd) { log("This device has no command service.", "l-bad"); return Promise.resolve(null); }
+  if (enc.encode(text).length > CMD_MAX) { log(`Command longer than ${CMD_MAX} bytes; the device would cut it.`, "l-bad"); return Promise.resolve(null); }
+  return new Promise((resolve) => { Q.items.push({ text, label: label || text.split(" ")[0], resolve }); pump(); });
 }
 
-// ── Writes ───────────────────────────────────────────────────────────────
-function write(charac, text) {
-  const bytes = enc.encode(text);
-  queue = queue.then(() => charac.writeValueWithResponse(bytes))
-               .catch(e => log(`Write failed: ${e.message}`, "er"));
-  return queue;
+function pump() {
+  if (Q.active || !Q.items.length || !connected()) return;
+  const it = Q.active = Q.items.shift();
+  it.lines = [];
+  it.started = Date.now();
+  log(`▶ ${mask(it.text)}`, "l-tx");
+  S.link.cmd(it.text);
+  it.hard = setTimeout(() => finish(true), REPLY_WAIT_MS);
+  it.busy = setTimeout(() => showBusy(`Waiting for the device to answer ${it.label}… It answers when it finishes reading or uploading.`), BUSY_AFTER_MS);
 }
 
-function sendMeter(json) {
-  if (!device || !device.gatt.connected) { log("Not connected. Click Connect first.", "er"); return; }
-  if (!ch.meterCmd) { log("The device has no meter service.", "er"); return; }
-  log(`meter ▶ ${json}`, "tx");
-  write(ch.meterCmd, json);
+function finish(timedOut = false) {
+  const it = Q.active;
+  if (!it) return;
+  if (Q.buf) { const l = Q.buf; Q.buf = ""; onCmdLine(l); }
+  clearTimeout(it.quiet); clearTimeout(it.hard); clearTimeout(it.busy);
+  Q.active = null;
+  hideBusy();
+  if (timedOut && !it.lines.length) log(`No answer to ${it.label}. The device may still answer later.`, "l-bad");
+  it.resolve(it.lines);
+  pump();
 }
 
-function sendCmd(cmd) {
-  cmd = cmd.trim();
-  if (!cmd) return;
-  if (!device || !device.gatt.connected) { log("Not connected. Click Connect first.", "er"); return; }
-  if (!ch.uartRx) { log("The device has no command service (OTA_BLE_ENABLE=0?).", "er"); return; }
-  if (enc.encode(cmd).length > CMD_MAX) { log(`Command longer than ${CMD_MAX} bytes; the device would cut it`, "er"); return; }
-  log(`▶ ${maskCmd(cmd)}`, "tx");
-  write(ch.uartRx, cmd);
+function onCmdText(text) {
+  Q.buf += text;
+  const parts = Q.buf.split("\n");
+  Q.buf = parts.pop();
+  for (const p of parts) onCmdLine(p.replace(/\r$/, ""));
+  const it = Q.active;
+  if (it) { clearTimeout(it.quiet); it.quiet = setTimeout(() => finish(false), REPLY_QUIET_MS); }
+  else if (Q.buf) setTimeout(() => { if (!Q.active && Q.buf) { const l = Q.buf; Q.buf = ""; onCmdLine(l); } }, REPLY_QUIET_MS);
 }
 
-function withAuth(cmd) {
-  const key = $("inAuth").value.trim();
-  return key ? `${cmd} auth=${key}` : cmd;
+function onCmdLine(line) {
+  if (!line.trim()) return;
+  log(line);
+  if (parseStatusLine(line)) { S.statusAt = Date.now(); scheduleRender(); }
+  if (Q.active) Q.active.lines.push(line);
 }
 
-// ── Notifications ────────────────────────────────────────────────────────
-// Command responses arrive in 180-byte notifications; print whole lines.
-function onUart(text) {
-  uartBuf += text;
-  const parts = uartBuf.split("\n");
-  uartBuf = parts.pop();
-  parts.forEach(l => { l = l.replace(/\r$/, ""); log(l); onUartLine(l); });
-  clearTimeout(uartTimer);
-  uartTimer = setTimeout(() => { if (uartBuf) { log(uartBuf); uartBuf = ""; } }, 400);
-}
+let renderTimer = null;
+function scheduleRender() { clearTimeout(renderTimer); renderTimer = setTimeout(renderAll, 50); }
 
-// GET_STATUS lines (commands.ino cmd_status) are "key=value key=value ...".
-// A bare word belongs to the previous value ("meter_pw=#1/3 not confirmed").
-const STATUS_LABELS = {
-  fw: "Firmware", imei: "IMEI", server: "OTA server", key: "Device key", interval: "OTA check",
-  apn: "APN", read: "Read interval", profile: "Profile interval", next_read: "Next read",
-  next_profile: "Next profile", clock: "Meter clock", reg: "Registration", fp: "Key fingerprint",
-  meter_pw: "Meter password", search: "Password search", next_search_in: "Next password search", modem: "Modem", busy: "OTA busy", partition: "Partition",
-  last: "Last OTA result", offer: "OTA offer", next_check_in: "Next OTA check",
-};
-const devStatus = {};
-
+// GET_STATUS: "key=value key=value"; a bare word belongs to the previous value.
 function parseStatusLine(line) {
   if (!/^[a-z_]+=/.test(line)) return false;
   let key = null;
   for (const tok of line.split(/\s+/)) {
     const eq = tok.indexOf("=");
-    if (eq > 0 && /^[a-z_]+$/.test(tok.slice(0, eq))) {
-      key = tok.slice(0, eq);
-      devStatus[key] = tok.slice(eq + 1);
-    } else if (key) {
-      devStatus[key] += " " + tok;
-    }
+    if (eq > 0 && /^[a-z_]+$/.test(tok.slice(0, eq))) { key = tok.slice(0, eq); S.status[key] = tok.slice(eq + 1); }
+    else if (key) S.status[key] += " " + tok;
   }
   return true;
 }
 
-function fmtStatus(k, v) {
-  if (k === "next_check_in") return fmtAge(parseInt(v, 10) || 0);
-  if (k === "busy") return v === "1" ? "yes" : "no";
-  return v;
+function showBusy(text) { $("busyText").textContent = text; $("busy").classList.add("show"); }
+function hideBusy() { $("busy").classList.remove("show"); }
+
+async function refreshStatus() {
+  const lines = await command("GET_STATUS", { label: "the status request" });
+  if (lines) { S.statusLines = lines.filter((l) => /^[a-z_]+=/.test(l)); renderAll(); }
+  return lines;
 }
 
-function renderDevStatus() {
-  const box = $("devStatus");
-  box.textContent = "";
-  const keys = Object.keys(STATUS_LABELS).filter(k => k in devStatus)
-    .concat(Object.keys(devStatus).filter(k => !(k in STATUS_LABELS)));
-  for (const k of keys) {
-    const div = document.createElement("div"), b = document.createElement("b"), s = document.createElement("span");
-    b.textContent = STATUS_LABELS[k] || k;
-    s.textContent = fmtStatus(k, devStatus[k]);
-    const v = devStatus[k];
-    if (/MISSING|down|not confirmed|fail|error/i.test(v)) s.style.color = "var(--err)";
-    else if (/^(set|ready|provisioned)$|accepted/.test(v)) s.style.color = "var(--ok)";
-    div.append(b, s);
-    box.appendChild(div);
-  }
-  $("devUpdated").textContent = `— updated ${new Date().toLocaleTimeString()}`;
-  loadSetFields();
+// ═══════════════════════════════════════════════════════════════════════════
+//  Meter service
+// ═══════════════════════════════════════════════════════════════════════════
+function meterSend(obj) {
+  if (!connected()) { log("Not connected. Click Connect first.", "l-bad"); return false; }
+  if (!S.link.hasMeter) { log("This device has no meter service.", "l-bad"); return false; }
+  const json = JSON.stringify(obj);
+  log(`meter ▶ ${json}`, "l-tx");
+  S.link.meter(json);
+  return true;
 }
 
-// SET form: filled from GET_STATUS; a field the user changed is kept and marked.
-const SET_FIELDS = { host: "sHost", port: "sPort", apn: "sApn", interval: "sInterval", read: "sRead", profile: "sProfile" };
-
-function deviceSetValues() {
-  const v = {};
-  if (devStatus.server) {
-    const i = devStatus.server.lastIndexOf(":");
-    if (i > 0) { v.host = devStatus.server.slice(0, i); v.port = devStatus.server.slice(i + 1); }
-  }
-  if (devStatus.apn !== undefined) v.apn = devStatus.apn;
-  for (const k of ["interval", "read", "profile"])
-    if (devStatus[k] !== undefined) v[k] = devStatus[k].replace(/\D+$/, "");   // "900s", "30min"
-  return v;
-}
-
-function loadSetFields() {
-  const v = deviceSetValues();
-  for (const [k, id] of Object.entries(SET_FIELDS)) {
-    const el = $(id);
-    if (v[k] === undefined) continue;
-    el.dataset.loaded = v[k];
-    if (!el.dataset.dirty) el.value = v[k];
-    markSetField(el);
-  }
-}
-
-function markSetField(el) {
-  const changed = el.dataset.loaded !== undefined && el.value.trim() !== el.dataset.loaded;
-  el.style.borderColor = changed ? "var(--warn)" : "";
-}
-
-function onUartLine(line) {
-  if (parseStatusLine(line)) renderDevStatus();
-  // SET answers one OK/ERR line per key; the device drops a command sent
-  // before it finished the previous one, so wait for the last line.
-  if (refreshAfterSet && /^(OK|ERR)/.test(line)) {
-    clearTimeout(refreshTimer);
-    refreshTimer = setTimeout(() => { refreshAfterSet = false; sendCmd("GET_STATUS"); }, 500);
-  }
-  if (!detectThenRead) return;
-  if (/^OK the next cycle/.test(line)) {
-    detectThenRead = false;
-    log("Password reset; reading the meter to try every password…", "sys");
-    sendMeter('{"cmd":"read"}');
-  } else if (/^(ERR|BUSY)/.test(line)) {
-    detectThenRead = false;   // e.g. wrong device key: don't read
-  }
-}
-
-// Readings are newline-terminated JSON split to the MTU.
-function onData(text) {
-  dataBuf += text;
+let meterBuf = "";
+function onMeterData(text) {
+  meterBuf += text;
   let nl;
-  while ((nl = dataBuf.indexOf("\n")) >= 0) {
-    const line = dataBuf.slice(0, nl).trim();
-    dataBuf = dataBuf.slice(nl + 1);
+  while ((nl = meterBuf.indexOf("\n")) >= 0) {
+    const line = meterBuf.slice(0, nl).trim();
+    meterBuf = meterBuf.slice(nl + 1);
     if (!line) continue;
     let m;
-    try { m = JSON.parse(line); } catch { log(`bad data line: ${line}`, "er"); continue; }
-    if (m.t === "begin") { rows = []; rowsSrc = m.src; renderRows(`receiving from ${m.src}…`); }
-    else if (m.t === "r") { rows.push(m); renderRows(`receiving from ${rowsSrc}… ${rows.length}`); }
+    try { m = JSON.parse(line); } catch { log(`Unreadable data line: ${line}`, "l-bad"); continue; }
+    if (m.t === "begin") { S.rows = []; S.rowsSrc = m.src; S.rowsDone = false; S.rowsRet = null; }
+    else if (m.t === "r") S.rows.push(m);
     else if (m.t === "end") {
-      renderRows(`${rows.length} values from ${rowsSrc}, ret=${m.ret}`);
-      log(`meter ◀ end ret=${m.ret} n=${m.n}`, m.ret === 0 ? "ok" : "er");
+      S.rowsDone = true; S.rowsRet = m.ret;
+      log(`meter ◀ ${S.rows.length} values from ${S.rowsSrc}, ${m.ret === -1 ? "no reading yet" : retText(m.ret)}`, m.ret === 0 ? "l-ok" : "l-bad");
     }
+    renderValues();
   }
 }
 
-function onStatus(text) {
+function onMeterStatus(text) {
   let s;
   try { s = JSON.parse(text); } catch { return; }
-  $("stState").textContent = s.state;
-  $("stState").style.color = s.state === "error" ? "var(--err)" : s.state === "reading" ? "var(--warn)" : "var(--ok)";
-  $("stRet").textContent = s.ret;
-  $("stN").textContent = s.n;
-  $("stAge").textContent = s.age < 0 ? "never" : fmtAge(s.age);
-  $("stInterval").textContent = `${s.interval} s`;
-  $("stProfile").textContent = `${s.profile} min`;
-  if (document.activeElement !== $("inInterval")) $("inInterval").value = s.interval;
-  if (document.activeElement !== $("inProfile")) $("inProfile").value = s.profile;
+  S.meter = s;
+  if (s.state === "reading") showBusy("The device is reading the meter…");
+  else if (!Q.active) hideBusy();
+  scheduleRender();
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+//  Installation check (G2)
+// ═══════════════════════════════════════════════════════════════════════════
 function fmtAge(s) {
+  s = Math.max(0, Math.round(s));
   if (s < 60) return `${s} s`;
   if (s < 3600) return `${Math.floor(s / 60)} min`;
-  return `${Math.floor(s / 3600)} h ${Math.floor(s % 3600 / 60)} min`;
+  if (s < 86400) return `${Math.floor(s / 3600)} h ${Math.floor((s % 3600) / 60)} min`;
+  return `${Math.floor(s / 86400)} d ${Math.floor((s % 86400) / 3600)} h`;
 }
 
-function renderRows(info) {
-  $("rdInfo").textContent = info ? `— ${info}` : "";
-  const body = $("rdBody");
+// apn_from (modem.ino modem_autoApn) in words.
+function apnFromText(st) {
+  const op = st.operator && st.operator !== "-" ? st.operator : "";
+  switch (st.apn_from) {
+    case "saved": return "worked before with this SIM";
+    case "operator": return op ? `matches operator ${op}` : "matches the operator";
+    case "fallback": return "found by trying the list";
+    case "set": return "fixed by hand";
+    default: return st.apn_from || "unknown";
+  }
+}
+
+function buildChecks() {
+  const st = S.status, m = S.meter, out = [];
+  const have = Object.keys(st).length > 0;
+  const add = (title, state, detail, action) => out.push({ title, state, detail, action });
+
+  // Device key and registration (register.ino)
+  if (!have) add("Device key", "unknown", "Status not read yet.");
+  else if (st.key === "set") add("Device key", "ok", "Installed. The device signs its data and update requests.");
+  else {
+    const reg = (st.reg || "").split(" ")[0];
+    if (reg === "pending") add("Device key", "warn", `Waiting for approval. On the OTA dashboard, approve IMEI ${st.imei || "?"} with key fingerprint ${st.fp || "?"}.`);
+    else if (reg === "rejected") add("Device key", "fail", "The OTA server rejected this device's registration. Ask the server admin.");
+    else if (reg === "off") add("Device key", "fail", "Automatic registration is off. Install the key under Settings.", ["Settings", () => showTab("settings")]);
+    else add("Device key", "warn", `No key yet (registration: ${st.reg || "not started"}). It registers at its next update check.`);
+  }
+
+  // Modem (modem.ino)
+  if (!have) add("Mobile network", "unknown", "Status not read yet.");
+  else if (st.modem === "ready") add("Mobile network", "ok", "Modem attached, data connection up.");
+  else add("Mobile network", "fail", "Modem not connected. Check the SIM, the antenna and the modem power. The device tries again before each upload.");
+
+  // APN (FW 2.0.12+ reports what is in use)
+  if (have && "apn_use" in st) {
+    const fixed = st.apn !== "auto";
+    if (st.apn_use === "-") add("APN", st.modem === "ready" ? "warn" : "fail", `${fixed ? `Fixed APN "${st.apn}"` : "Automatic"}: no data connection yet.${fixed ? " If this SIM is not an IoT SIM, try Automatic." : ""}`, ["Settings", () => showTab("settings")]);
+    else add("APN", "ok", `${st.apn_use} (${fixed ? "fixed by hand" : `automatic: ${apnFromText(st)}`}), SIM ${st.sim || "?"}.`);
+  } else if (have && st.apn !== undefined) {
+    add("APN", "info", `Configured: ${st.apn || "(empty)"}. This firmware does not report the APN in use (2.0.12 and later do).`);
+  }
+
+  // Meter link (meter status characteristic)
+  if (!m) add("Meter connection", "unknown", "No meter status yet.");
+  else if (m.state === "reading") add("Meter connection", "info", "Reading the meter now…");
+  else if (m.age < 0) add("Meter connection", "warn", "No meter read since the device started.", ["Read now", () => { showTab("meter"); readNow(); }]);
+  else if (m.ret === 0) add("Meter connection", "ok", `Last read ${fmtAge(m.age)} ago: ${m.n} values.`);
+  else if (isPasswordError(m.ret)) add("Meter connection", "fail", `Last read failed: ${retText(m.ret)}.`, ["Passwords", () => showTab("passwords")]);
+  else add("Meter connection", "fail", `Last read failed: ${retText(m.ret)}.${isLinkError(m.ret) ? " Also check the meter's communication port is enabled." : ""}`);
+
+  // Meter password (meter_password.ino)
+  if (have && st.meter_pw) {
+    if (/accepted/.test(st.meter_pw)) add("Meter password", "ok", `Password ${st.meter_pw.split(" ")[0]} accepted by the meter.`);
+    else add("Meter password", "warn", `Password ${st.meter_pw.split(" ")[0]} not confirmed yet.${/search=/.test(st.meter_pw) ? " The list is tried at the next read." : ""}`, ["Passwords", () => showTab("passwords")]);
+  }
+
+  // Schedule / meter clock (schedule.ino)
+  if (have) {
+    if (st.clock === "not_read") add("Read schedule", "warn", `Meter clock not read yet, so reads run on device uptime. Readings every ${st.read || "?"}, profiles every ${st.profile || "?"}.`);
+    else if (st.next_read) add("Read schedule", "ok", `Readings every ${st.read}, profiles every ${st.profile}. Next reading ${st.next_read}, next profiles ${st.next_profile} (meter time).`);
+  }
+
+  // OTA (ota_client.ino)
+  if (have && st.last) {
+    const last = st.last, next = st.next_check_in ? ` Next check in ${fmtAge(parseInt(st.next_check_in, 10) || 0)}.` : "";
+    if (last === "never_checked") add("Firmware updates", "info", `Not checked since start-up.${next}`);
+    else if (/^no_update/.test(last)) {
+      const why = { up_to_date: "", pinned_already_running: " (pinned version)", running_newer_than_channel: " (runs a newer version than its channel)",
+        channel_has_no_release: " (no release on its channel)", device_disabled: " (updates turned off for this device)" }[last.split(":")[1]];
+      add("Firmware updates", "ok", `No update due${why ?? ` (${last.split(":")[1] || "-"})`}.${next}`);
+    }
+    else if (/^(downloading|flashed)/.test(last)) add("Firmware updates", "info", `${last}.`);
+    else if (last === "awaiting_approval") add("Firmware updates", "warn", `Waiting for approval on the OTA dashboard.${next}`);
+    else add("Firmware updates", "warn", `Last check: ${last}.${next}`);
+  }
+  return out;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  Rendering
+// ═══════════════════════════════════════════════════════════════════════════
+const BADGE = { ok: "OK", warn: "Check", fail: "Problem", info: "Info", unknown: "—" };
+
+function el(tag, attrs = {}, ...kids) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k === "class") e.className = v; else if (k === "text") e.textContent = v; else if (k.startsWith("on")) e[k] = v; else e.setAttribute(k, v);
+  }
+  for (const k of kids) if (k != null) e.append(k);
+  return e;
+}
+
+function renderAll() {
+  renderHeader(); renderChecks(); renderIdent(); renderMeterState(); renderSettings(); renderPwStatus();
+}
+
+function renderHeader() {
+  const on = connected();
+  $("chip").classList.toggle("on", on);
+  $("chipText").textContent = on ? `${S.name}${S.status.fw ? ` · FW ${S.status.fw}` : ""}` : "Not connected";
+  $("btnConnect").classList.toggle("hidden", on);
+  $("btnDisconnect").classList.toggle("hidden", !on);
+}
+
+function renderChecks() {
+  const box = $("checks");
+  box.textContent = "";
+  if (!connected() && !Object.keys(S.status).length) { $("checkSummary").textContent = "Connect to a device to check it."; return; }
+  const checks = buildChecks();
+  for (const c of checks) {
+    box.append(el("li", { class: `check s-${c.state}` },
+      el("span", { class: "badge", text: BADGE[c.state] }),
+      el("div", {}, el("div", { class: "t", text: c.title }), el("div", { class: "d", text: c.detail })),
+      c.action ? el("div", { class: "act" }, el("button", { class: "btn small", text: c.action[0], onclick: c.action[1] })) : null));
+  }
+  const fails = checks.filter((c) => c.state === "fail").length, warns = checks.filter((c) => c.state === "warn").length;
+  $("checkSummary").textContent = !Object.keys(S.status).length ? "Reading the device status…"
+    : fails ? `${fails} problem${fails > 1 ? "s" : ""}${warns ? ` and ${warns} item${warns > 1 ? "s" : ""} to check` : ""}.`
+    : warns ? `Working, ${warns} item${warns > 1 ? "s" : ""} to check.` : "Everything checked is working.";
+}
+
+function renderIdent() {
+  const st = S.status, box = $("ident");
+  const items = [["Name", S.name || "—"], ["Firmware", st.fw], ["IMEI", st.imei], ["Partition", st.partition],
+    ["Registration", st.reg], ["Key fingerprint", st.fp], ["Update server", st.server], ["Status read", S.statusAt ? new Date(S.statusAt).toLocaleTimeString() : null]];
+  box.textContent = "";
+  for (const [k, v] of items) if (v) box.append(el("div", {}, el("b", { text: k }), el("span", { text: v })));
+}
+
+function renderMeterState() {
+  const m = S.meter, box = $("meterState");
+  box.textContent = "";
+  const tile = (k, v) => box.append(el("div", { class: "tile" }, el("b", { text: k }), el("span", { text: v })));
+  if (!m) { tile("State", "—"); return; }
+  tile("State", m.state);
+  tile("Last result", m.age < 0 ? "no read yet" : m.ret === 0 ? "OK" : `error ${m.ret}`);
+  tile("Values", String(m.n));
+  tile("Read", m.age < 0 ? "never" : `${fmtAge(m.age)} ago`);
+  $("btnRead").disabled = m.state === "reading";
+}
+
+function fmtValue(r) {
+  if (r.v === undefined) return r.s;
+  return String(+Number(r.v).toFixed(4));
+}
+
+function renderValues() {
+  const byObis = new Map(S.rows.map((r) => [r.obis, r]));
+  const kv = $("keyValues");
+  kv.textContent = "";
+  for (const [obis, label] of KEY_VALUES) {
+    const r = byObis.get(obis);
+    if (!r) continue;
+    kv.append(el("div", { class: "tile" }, el("b", { text: label }), el("span", {}, fmtValue(r), r.u ? el("small", { text: r.u }) : null)));
+  }
+  if (!kv.children.length) kv.append(el("div", { class: "empty", text: S.rows.length ? "None of the usual values are in this reading." : "No reading yet." }));
+  $("readInfo").textContent = S.rowsSrc ? `— ${S.rows.length} values ${S.rowsDone ? "" : "so far "}from ${S.rowsSrc === "cache" ? "the last reading" : "the meter"}` : "";
+
+  const q = $("filter").value.trim().toLowerCase();
+  const body = $("values");
   body.textContent = "";
+  const rows = S.rows.filter((r) => !q || r.obis.includes(q) || (r.name || "").toLowerCase().includes(q));
   for (const r of rows) {
-    const tr = document.createElement("tr");
-    const val = r.v !== undefined ? String(+r.v.toFixed(4)) : r.s;
-    [[r.obis], [r.name], [val, r.v !== undefined ? "num" : ""], [r.u || ""]].forEach(([v, cls]) => {
-      const td = document.createElement("td");
-      td.textContent = v;
-      if (cls) td.className = cls;
-      tr.appendChild(td);
-    });
-    body.appendChild(tr);
+    body.append(el("tr", {}, el("td", { class: "obis mono", text: r.obis }), el("td", { text: r.name || "" }),
+      el("td", { class: r.v !== undefined ? "num" : "", text: fmtValue(r) }), el("td", { text: r.u || "" })));
   }
+  if (!rows.length) body.append(el("tr", {}, el("td", { colspan: "4", class: "empty", text: S.rows.length ? "No value matches the filter." : "No reading yet." })));
 }
 
-// ── UI wiring ────────────────────────────────────────────────────────────
-$("btnConnect").onclick = connect;
-$("btnDisconnect").onclick = () => device && device.gatt.connected && device.gatt.disconnect();
-$("btnClear").onclick = () => { $("log").textContent = ""; };
-
-document.querySelectorAll("[data-meter]").forEach(b => b.onclick = () => sendMeter(b.dataset.meter));
-document.querySelectorAll("[data-cmd]").forEach(b => b.onclick = () => {
-  if (b.dataset.confirm && !confirm(b.dataset.confirm)) return;
-  sendCmd(b.dataset.auth ? withAuth(b.dataset.cmd) : b.dataset.cmd);
-});
-
-$("btnInterval").onclick = () => {
-  const s = parseInt($("inInterval").value, 10);
-  if (!(s >= 30 && s <= 86400)) { log("Reading interval must be 30..86400 s", "er"); return; }
-  sendMeter(JSON.stringify({ cmd: "interval", s }));
-};
-$("btnProfile").onclick = () => {
-  const m = parseInt($("inProfile").value, 10);
-  if (!(m >= 5 && m <= 1440 && 1440 % m === 0)) { log("Profile interval must divide 1440, 5..1440 min", "er"); return; }
-  sendMeter(JSON.stringify({ cmd: "profile", m }));
-};
-
-for (const id of Object.values(SET_FIELDS)) {
-  $(id).addEventListener("input", e => { e.target.dataset.dirty = "1"; markSetField(e.target); });
+// Settings fields follow the device unless the user is editing them.
+function setField(id, value) {
+  const e = $(id);
+  if (value === undefined || value === null) return;
+  e.dataset.device = String(value);
+  if (!e.dataset.edited) e.value = String(value);
+  e.classList.toggle("changed", e.value.trim() !== e.dataset.device);
 }
 
-$("btnSet").onclick = () => {
-  const fields = { ...SET_FIELDS, secret: "sSecret" };
+function renderSettings() {
+  const st = S.status, m = S.meter;
+  if (m) { setField("inRead", m.interval); setField("inProfile", m.profile); }
+  if (st.server) {
+    const i = st.server.lastIndexOf(":");
+    if (i > 0) { setField("inHost", st.server.slice(0, i)); setField("inPort", st.server.slice(i + 1)); }
+  }
+  if (st.interval) setField("inInterval", parseInt(st.interval, 10));
+  if (st.apn !== undefined && !$("inApn").dataset.edited) {
+    const auto = st.apn === "auto";
+    $("apnAuto").checked = auto; $("apnFixed").checked = !auto;
+    if (!auto) $("inApn").value = st.apn;
+    syncApnInput();
+  }
+  $("apnNow").textContent = "apn_use" in st
+    ? `APN in use: ${st.apn_use === "-" ? "none (not connected)" : `${st.apn_use} (${apnFromText(st)})`}`
+    : st.apn !== undefined ? `Configured APN: ${st.apn}. This firmware does not report the APN in use.` : "APN in use: unknown.";
+}
+
+function syncApnInput() { $("inApn").disabled = $("apnAuto").checked; }
+
+function renderPwStatus() {
+  if (S.status.meter_pw) $("pwStatus").textContent = `In use: password ${S.status.meter_pw}. The device tries the list in order and keeps the one the meter accepts. Passwords are shown masked.`;
+}
+
+function renderPasswords() {
+  const body = $("pwBody");
+  body.textContent = "";
+  for (const p of S.passwords) {
+    body.append(el("tr", {}, el("td", { text: String(p.n) }), el("td", { class: "mono", text: p.masked }), el("td", { text: p.state || "" }),
+      el("td", { style: "text-align:right" }, el("button", { class: "btn small danger", text: "Delete", onclick: () => pwDelete(p.n) }))));
+  }
+  if (!S.passwords.length) body.append(el("tr", {}, el("td", { colspan: "4", class: "empty", text: "Not loaded." })));
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  Actions
+// ═══════════════════════════════════════════════════════════════════════════
+function authKey() { return $("auth").value.trim().toLowerCase(); }
+
+/** cmd with auth=<key> when the device has a key; null (and a message) if the key is missing or malformed. */
+function withAuth(cmd, resultId) {
+  const key = authKey();
+  if (S.status.key === "set" && !key) {
+    setResult(resultId, "This change needs the device key. Enter it at the top of Settings.", false);
+    showTab("settings"); $("auth").focus();
+    return null;
+  }
+  if (key && !RULES.secret(key)) { setResult(resultId, "The device key must be 64 hex characters.", false); return null; }
+  return key ? `${cmd} auth=${key}` : cmd;
+}
+
+/** Run a SET and show the per-key OK/ERR lines. */
+async function runSet(pairs, resultId) {
+  const cmd = withAuth(`SET ${pairs.join(" ")}`, resultId);
+  if (!cmd) return false;
+  setResult(resultId, "Saving…");
+  const lines = await command(cmd, { label: "the change" });
+  if (!lines) return false;
+  const errs = lines.filter((l) => /^ERR/.test(l)), oks = lines.filter((l) => /^OK/.test(l));
+  if (!lines.length) setResult(resultId, "No answer from the device. Check the status before trying again.", false);
+  else if (errs.length) setResult(resultId, errs.map((l) => l.replace(/^ERR\s*/, "")).join("; "), false);
+  else setResult(resultId, `Saved: ${oks.map((l) => mask(l.replace(/^OK\s*/, ""))).join(", ")}.`, true);
+  for (const id of ["inHost", "inPort", "inInterval", "inApn"]) delete $(id).dataset.edited;
+  await refreshStatus();
+  return !errs.length && lines.length > 0;
+}
+
+function readNow() {
+  if (!connected()) { log("Not connected. Click Connect first.", "l-bad"); return; }
+  if (Date.now() - S.lastReadAt < 60000 &&
+      !confirm("The meter was read less than a minute ago. Reading again may try the meter passwords again. Read anyway?")) return;
+  if (meterSend({ cmd: "read" })) S.lastReadAt = Date.now();
+}
+
+async function saveSchedule() {
+  const read = Number($("inRead").value), profile = Number($("inProfile").value);
+  if (!RULES.read(read)) return setResult("scheduleResult", "Readings: a whole number of seconds from 30 to 86 400.", false);
+  if (!RULES.profile(profile)) return setResult("scheduleResult", "Profiles: minutes that divide a day.", false);
+  const m = S.meter || {};
+  if (read === m.interval && profile === m.profile) return setResult("scheduleResult", "Nothing changed.");
+  setResult("scheduleResult", "Saving…");
+  if (read !== m.interval) meterSend({ cmd: "interval", s: read });
+  if (profile !== m.profile) meterSend({ cmd: "profile", m: profile });
+  delete $("inRead").dataset.edited; delete $("inProfile").dataset.edited;
+  // The device answers with a status notification; a rejected value leaves the old one.
+  await sleep(2500);
+  const now = S.meter || {};
+  const ok = now.interval === read && now.profile === profile;
+  setResult("scheduleResult", ok ? `Saved: readings every ${read} s, profiles every ${profile} min.` : "The device kept its previous schedule (value rejected, or it is busy reading).", ok);
+  renderSettings();
+}
+
+async function saveApn() {
+  const auto = $("apnAuto").checked, apn = $("inApn").value.trim();
+  if (!auto && !RULES.apn(apn)) return setResult("apnResult", "APN: 1 to 63 characters, no spaces or quotes.", false);
+  const value = auto ? "auto" : apn;
+  if (value === S.status.apn) return setResult("apnResult", "Nothing changed.");
+  await runSet([`apn=${value}`], "apnResult");
+}
+
+async function saveServer() {
   const pairs = [];
-  for (const [k, id] of Object.entries(fields)) {
-    const v = $(id).value.trim();
-    if (!v || v === $(id).dataset.loaded) continue;   // unchanged device value
-    if (/\s/.test(v)) { log(`${k}: no spaces allowed`, "er"); return; }
-    if (k === "secret" && !/^[0-9a-fA-F]{64}$/.test(v)) { log("secret must be 64 hex chars", "er"); return; }
-    pairs.push(`${k}=${v}`);
-  }
-  if (!pairs.length) { log("Nothing changed. Edit a SET field first.", "er"); return; }
-  sendCmd(withAuth(`SET ${pairs.join(" ")}`));
-  $("sSecret").value = "";
-  for (const id of Object.values(SET_FIELDS)) delete $(id).dataset.dirty;
-  refreshAfterSet = true;
-};
-
-$("btnPwAdd").onclick = () => {
-  const pw = $("pwAdd").value.trim();
-  if (!pw || /\s/.test(pw) || pw.length > 16) { log("Password: 1..16 chars, no spaces", "er"); return; }
-  sendCmd(withAuth(`METER_PW ADD ${pw}`));
-  $("pwAdd").value = "";
-};
-$("btnPwDel").onclick = () => {
-  const n = parseInt($("pwDel").value, 10);
-  if (!(n >= 1 && n <= 8)) { log("Pick a password number 1..8 (see LIST)", "er"); return; }
-  sendCmd(withAuth(`METER_PW DEL ${n}`));
-};
-
-$("btnDetectNow").onclick = () => {
-  if (!device || !device.gatt.connected) { log("Not connected. Click Connect first.", "er"); return; }
-  if (!ch.meterCmd) { log("Meter service not available, can't read after DETECT", "er"); return; }
-  detectThenRead = true;
-  sendCmd(withAuth("METER_PW DETECT"));
-};
-
-$("btnShowKey").onclick = () => {
-  const i = $("inAuth");
-  i.type = i.type === "password" ? "text" : "password";
-  $("btnShowKey").textContent = i.type === "password" ? "Show" : "Hide";
-};
-
-$("btnRaw").onclick = () => { sendCmd($("inRaw").value); $("inRaw").value = ""; };
-$("inRaw").addEventListener("keydown", e => { if (e.key === "Enter") $("btnRaw").click(); });
-
-setConnected(false);
-if (bleProblem()) {
-  $("noBle").classList.remove("hidden");
-  log(bleProblem(), "er");
-} else {
-  log("Click Connect and pick DLMS-Meter-XXXX", "sys");
+  const host = $("inHost").value.trim(), port = Number($("inPort").value), interval = Number($("inInterval").value);
+  if (host !== $("inHost").dataset.device) { if (!RULES.host(host)) return setResult("serverResult", "Host: 1 to 64 characters, no spaces or quotes.", false); pairs.push(`host=${host}`); }
+  if (String(port) !== $("inPort").dataset.device) { if (!RULES.port(port)) return setResult("serverResult", "Port: 1 to 65 535.", false); pairs.push(`port=${port}`); }
+  if (String(interval) !== $("inInterval").dataset.device) { if (!RULES.interval(interval)) return setResult("serverResult", "Check interval: 300 to 2 592 000 s.", false); pairs.push(`interval=${interval}`); }
+  if (!pairs.length) return setResult("serverResult", "Nothing changed.");
+  if (pairs.some((p) => p.startsWith("host=") || p.startsWith("port=")) &&
+      !confirm("Point this device at a different update server? It will not get updates or a key from the old one.")) return;
+  await runSet(pairs, "serverResult");
 }
+
+async function saveSecret() {
+  const s = $("inSecret").value.trim();
+  if (!RULES.secret(s)) return setResult("secretResult", "The new key must be 64 hex characters.", false);
+  if (S.status.key === "set" && !confirm("This device already has a key. Replace it? Data signed with the new key is only accepted if it matches the server's.")) return;
+  $("inSecret").value = "";
+  await runSet([`secret=${s.toLowerCase()}`], "secretResult");
+}
+
+function parsePwList(lines) {
+  const list = [];
+  for (const l of lines) {
+    const m = /^(\d+)\.\s+(\S+)(?:\s+<-\s+in use,\s+(.+))?$/.exec(l);
+    if (m) list.push({ n: Number(m[1]), masked: m[2], state: m[3] ? `in use, ${m[3]}` : "" });
+  }
+  return list;
+}
+
+async function pwList() {
+  const lines = await command("METER_PW LIST", { label: "the password list" });
+  if (!lines) return;
+  S.passwords = parsePwList(lines);
+  renderPasswords();
+}
+
+async function pwRun(sub, okText) {
+  const cmd = withAuth(`METER_PW ${sub}`, "pwResult");
+  if (!cmd) return null;
+  const lines = await command(cmd, { label: "the password change" });
+  if (!lines) return null;
+  const err = lines.find((l) => /^ERR/.test(l));
+  setResult("pwResult", err ? err.replace(/^ERR\s*/, "") : lines.length ? okText : "No answer from the device.", !err && lines.length > 0);
+  await pwList();
+  await refreshStatus();
+  return !err && lines.length > 0;
+}
+
+async function pwAdd() {
+  const pw = $("inPw").value;
+  if (!RULES.meterPw(pw)) return setResult("pwResult", "Password: 1 to 16 printable characters, no spaces.", false);
+  $("inPw").value = "";
+  await pwRun(`ADD ${pw}`, "Password added.");
+}
+function pwDelete(n) {
+  if (S.passwords.length <= 1) return setResult("pwResult", "The last password cannot be deleted. Use Restore default list.", false);
+  if (confirm(`Delete password #${n}?`)) pwRun(`DEL ${n}`, `Password #${n} deleted.`);
+}
+
+async function detect(readAfter) {
+  const ok = await pwRun("DETECT", readAfter ? "Saved match forgotten. Reading the meter to try every password…" : "The next scheduled read tries the list from #1.");
+  if (ok && readAfter) { S.lastReadAt = 0; showTab("meter"); readNow(); }
+}
+
+function report() {
+  const st = S.status, t = new Date();
+  const lines = [
+    "AMR device commissioning report",
+    `Created: ${t.toLocaleString()}`,
+    `Device: ${S.name || "-"}${DEMO ? " (simulated demo device)" : ""}`,
+    "",
+    "== Installation check ==",
+    ...buildChecks().map((c) => `[${BADGE[c.state]}] ${c.title}: ${c.detail}`),
+    "",
+    "== Device status (GET_STATUS) ==",
+    ...(S.statusLines.length ? S.statusLines : Object.entries(st).map(([k, v]) => `${k}=${v}`)),
+    "",
+    "== Meter status ==",
+    S.meter ? JSON.stringify(S.meter) : "-",
+    "",
+    `== Values (${S.rows.length}, ${S.rowsSrc || "none"}) ==`,
+    ...S.rows.map((r) => `${r.obis.padEnd(18)} ${String(r.name || "").padEnd(32)} ${fmtValue(r)} ${r.u || ""}`),
+  ];
+  download(`amr-${st.imei || "device"}-${stamp(t)}.txt`, mask(lines.join("\n")) + "\n");
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  Connection
+// ═══════════════════════════════════════════════════════════════════════════
+async function connect() {
+  const handlers = { onMeterData, onMeterStatus, onCmdText, onClose };
+  if (!DEMO) { const p = bleProblem(); if (p) { log(p, "l-bad"); return; } }
+  const link = DEMO ? new DemoLink(handlers) : new BleLink(handlers);
+  try {
+    await link.connect();
+  } catch (e) {
+    if (e.name === "NotFoundError") log("No device chosen.", "l-sys");
+    else log(`Could not connect: ${e.message}`, "l-bad");
+    link.disconnect();
+    return;
+  }
+  Object.assign(S, { link, name: link.name, status: {}, statusLines: [], statusAt: 0, rows: [], rowsSrc: "", passwords: [] });
+  log(`Connected to ${link.name}`, "l-sys");
+  renderAll(); renderValues(); renderPasswords();
+  await refreshStatus();
+  if (S.link) meterSend({ cmd: "get" });
+}
+
+function onClose() {
+  if (!S.link) return;
+  log("Disconnected", "l-sys");
+  S.link = null;
+  for (const it of Q.items) it.resolve(null);
+  Q.items = [];
+  if (Q.active) { clearTimeout(Q.active.quiet); clearTimeout(Q.active.hard); clearTimeout(Q.active.busy); Q.active.resolve(null); Q.active = null; }
+  Q.buf = ""; meterBuf = "";
+  hideBusy();
+  renderAll();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  Wiring
+// ═══════════════════════════════════════════════════════════════════════════
+function showTab(name) {
+  document.querySelectorAll(".tabs button").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.tab === name)));
+  document.querySelectorAll(".panel").forEach((p) => p.classList.toggle("active", p.id === `tab-${name}`));
+  if (name === "passwords" && connected() && !S.passwords.length) pwList();
+  if (history.replaceState) history.replaceState(null, "", `${location.search}#${name}`);
+}
+document.querySelectorAll(".tabs button").forEach((b) => (b.onclick = () => showTab(b.dataset.tab)));
+
+$("btnConnect").onclick = connect;
+$("btnDisconnect").onclick = () => S.link && S.link.disconnect();
+$("btnRefresh").onclick = () => { refreshStatus(); meterSend({ cmd: "status" }); };
+$("btnReport").onclick = report;
+$("btnOta").onclick = async () => {
+  const lines = await command("CHECK_OTA", { label: "the update check" });
+  if (lines) setResult("maintResult", lines.join(" ") || "No answer.", /^OK/.test(lines[0] || ""));
+};
+$("btnReboot").onclick = async () => {
+  if (!confirm("Reboot the device? Readings waiting for upload are lost, and Bluetooth disconnects.")) return;
+  const lines = await command("REBOOT", { label: "the reboot" });
+  if (lines) setResult("maintResult", lines.join(" ") || "No answer.", /^OK/.test(lines[0] || ""));
+};
+
+$("btnRead").onclick = readNow;
+$("btnCached").onclick = () => meterSend({ cmd: "get" });
+$("filter").oninput = renderValues;
+
+for (const m of PROFILE_MINUTES) $("inProfile").append(el("option", { value: String(m), text: m >= 60 && m % 60 === 0 ? `${m} (${m / 60} h)` : String(m) }));
+for (const id of ["inRead", "inProfile", "inHost", "inPort", "inInterval", "inApn"]) {
+  $(id).addEventListener("input", (e) => { e.target.dataset.edited = "1"; e.target.classList.toggle("changed", e.target.value.trim() !== (e.target.dataset.device || "")); });
+}
+$("apnAuto").onchange = $("apnFixed").onchange = () => { $("inApn").dataset.edited = "1"; syncApnInput(); };
+$("btnSchedule").onclick = saveSchedule;
+$("btnApn").onclick = saveApn;
+$("btnServer").onclick = saveServer;
+$("btnSecret").onclick = saveSecret;
+$("btnShowAuth").onclick = () => {
+  const i = $("auth");
+  i.type = i.type === "password" ? "text" : "password";
+  $("btnShowAuth").textContent = i.type === "password" ? "Show" : "Hide";
+};
+
+$("btnPwList").onclick = pwList;
+$("btnPwAdd").onclick = pwAdd;
+$("inPw").addEventListener("keydown", (e) => { if (e.key === "Enter") pwAdd(); });
+$("btnPwClear").onclick = () => { if (confirm("Replace the list with the default passwords?")) pwRun("CLEAR", "Default list restored."); };
+$("btnDetect").onclick = () => detect(false);
+$("btnDetectNow").onclick = () => detect(true);
+
+$("btnRaw").onclick = () => { const v = $("inRaw").value; $("inRaw").value = ""; command(v); };
+$("inRaw").addEventListener("keydown", (e) => { if (e.key === "Enter") $("btnRaw").click(); });
+$("btnClearLog").onclick = () => { $("log").textContent = ""; logLines.length = 0; };
+$("btnCopyLog").onclick = () => navigator.clipboard && navigator.clipboard.writeText(logLines.join("\n")).then(() => log("Log copied.", "l-sys"));
+$("btnSaveLog").onclick = () => download(`amr-ble-log-${stamp(new Date())}.txt`, logLines.join("\n") + "\n");
+$("btnBusyCancel").onclick = () => {
+  if (Q.active) { log("Stopped waiting. The device may still be busy; its answer will show in the log.", "l-sys"); finish(true); }
+  hideBusy();
+};
+
+// Start
+const banner = $("banner");
+if (DEMO) {
+  banner.innerHTML = '<div class="note info">Demo: a simulated device, no Bluetooth. Its device key is 64 × <code>a</code>. Remove <code>?demo</code> from the address for a real device.</div>';
+  banner.classList.remove("hidden");
+} else if (bleProblem()) {
+  banner.innerHTML = "";
+  banner.append(el("div", { class: "note", text: `${bleProblem()} To try the page without a device, add ?demo to the address.` }));
+  banner.classList.remove("hidden");
+}
+const initialTab = location.hash.slice(1);
+if (["overview", "meter", "settings", "passwords", "console"].includes(initialTab)) showTab(initialTab);
+renderAll(); renderValues();
+log(DEMO ? "Demo mode. Click Connect." : "Click Connect and choose DLMS-Meter-XXXX.", "l-sys");
 </script>
 </body>
 </html>

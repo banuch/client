@@ -65,8 +65,10 @@ String cfg_set(const String& key, const String& value) {
         p.begin(NVS_NAMESPACE, false); p.putUInt(K_INTERVAL, v); p.end();
     } else if (key == "apn") {
         if (value.length() > 63 || value.indexOf('"') != -1) return "bad apn";
-        g_cfg.apn = value;
-        p.begin(NVS_NAMESPACE, false); p.putString(K_APN, value); p.end();
+        String v = value;
+        if (v.equalsIgnoreCase(APN_AUTO)) v = APN_AUTO;
+        g_cfg.apn = v;
+        p.begin(NVS_NAMESPACE, false); p.putString(K_APN, v); p.end();
         g_ota.modemReady = false;   // re-run AT init with the new APN on next check
     } else if (key == "read") {
         long v = value.toInt();

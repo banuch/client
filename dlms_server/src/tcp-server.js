@@ -62,7 +62,7 @@ function createTcpServer(cfg, { db, logs, log = console.log }) {
       if (!stored) res.dup = true;
       if (skipped.length) {
         res.skipped = skipped.length;
-        // FW 2.0.11+ keeps these profiles' markers, so their rows are read again.
+        // FW 2.0.13+ keeps these profiles' markers, so their rows are read again.
         res.skippedObis = skipped.map((k) => (k.obis && OBIS.test(k.obis) ? k.obis : null));
       }
       return res;

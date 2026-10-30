@@ -4,7 +4,8 @@
 //    HELP
 //    GET_STATUS                      also shows reg=<state> fp=<key fingerprint>
 //    CHECK_OTA                       queue an immediate check (runs in loop())
-//    SET key=value [key=value ...]   keys: host port secret interval apn
+//    SET key=value [key=value ...]   keys: host port secret interval
+//                                    apn (an APN, or auto = from the SIM)
 //                                    read (meter reading interval, s)
 //                                    profile (profile read interval, min)
 //    RESET_MARKS                     serial only: forget which profile rows
@@ -29,9 +30,9 @@ static void cmd_status(Print& out) {
     const esp_partition_t* run = esp_ota_get_running_partition();
     long nextS = (long)(int32_t)(g_ota.nextCheckMs - millis()) / 1000;
     out.printf("fw=%s imei=%s\n", FW_VERSION, g_ota.imei.length() ? g_ota.imei.c_str() : "?");
-    out.printf("server=%s:%u key=%s interval=%lus apn=%s\n", g_cfg.host.c_str(), g_cfg.port,
-               g_cfg.secret.length() == 64 ? "set" : "MISSING", (unsigned long)g_cfg.intervalS,
-               g_cfg.apn.c_str());
+    out.printf("server=%s:%u key=%s interval=%lus\n", g_cfg.host.c_str(), g_cfg.port,
+               g_cfg.secret.length() == 64 ? "set" : "MISSING", (unsigned long)g_cfg.intervalS);
+    out.printf("%s\n", modem_apnStatusLine().c_str());
     out.printf("read=%lus profile=%lumin %s\n", (unsigned long)g_cfg.readS,
                (unsigned long)g_cfg.profileMin, sched_statusLine().c_str());
     out.printf("%s\n", reg_statusLine().c_str());
@@ -130,7 +131,7 @@ void cmd_handle(String line, CmdSource src, Print& out) {
     cmd.toUpperCase();
 
     if (cmd == "HELP") {
-        out.println("GET_STATUS | CHECK_OTA | SET key=value ... (host port secret interval apn read profile"
+        out.println("GET_STATUS | CHECK_OTA | SET key=value ... (host port secret interval apn=<apn>|auto read profile"
                     " [auth=<key> over BLE]) | RESET_MARKS | METER_PW LIST|ADD <pw>|DEL <n>|CLEAR|DETECT"
                     " | REBOOT");
     } else if (cmd == "GET_STATUS" || cmd == "STATUS") {

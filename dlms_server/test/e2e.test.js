@@ -173,7 +173,7 @@ test('profile rows are stored once and served by profile', async () => {
   });
 });
 
-test('event rows of the marker second, resent every cycle (FW 2.0.11), are stored once', async () => {
+test('event rows of the marker second, resent every cycle (FW 2.0.13), are stored once', async () => {
   const T = '2026-03-07 22:56:25';
   const events = (codes) => ({
     obis: '0.0.99.98.0.255', name: 'Event Log: Voltage',
@@ -181,7 +181,7 @@ test('event rows of the marker second, resent every cycle (FW 2.0.11), are store
     rows: codes.map((c) => ({ t: T, c: [T, c], e: `event ${c}` })),
   });
   await withServer({}, async (s) => {
-    const msg = (seq, profiles) => buildMessage({ type: 'READING', deviceId: IMEI, boot: 5, seq, fw: '2.0.11',
+    const msg = (seq, profiles) => buildMessage({ type: 'READING', deviceId: IMEI, boot: 5, seq, fw: '2.0.13',
       body: JSON.stringify({ ...READING, profiles }), key: KEY });
     // Cycle 1 sees event 7; cycle 2 sends it again with event 9, logged later in the same second.
     await send(s.tcpPort, Buffer.concat([msg(0, [events([7])]), msg(1, [events([7, 9])]), msg(2, [events([7, 9])])]), 3);
