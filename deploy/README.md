@@ -24,7 +24,7 @@ Then, once: `cd ota_server && sudo -u amr npm run user:add -- admin --role admin
 
 ```bash
 cd /opt/client && git pull
-(cd ota_server && npm install --omit=dev) && (cd dlms_server && npm install --omit=dev)
+(cd ota_server && npm ci --omit=dev) && (cd dlms_server && npm ci --omit=dev)
 sudo systemctl restart amr-ota amr-dlms
 ```
 
@@ -33,7 +33,8 @@ sudo systemctl restart amr-ota amr-dlms
 `tools\deploy.ps1` ships the branch you are on in one step: it runs the tests of
 the servers that changed, pushes, opens a pull request (or uses the open one),
 asks once, merges it into `master`, then on the server pulls `master`, runs
-`npm install` where `package.json` changed, restarts only the services whose
+`npm ci` where `package.json` changed (it never rewrites `package-lock.json`,
+so the server checkout stays clean), restarts only the services whose
 code changed (`shared/` and `deploy/` restart both) and checks that both answer.
 
 ```powershell
