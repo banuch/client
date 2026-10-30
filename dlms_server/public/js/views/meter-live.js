@@ -100,13 +100,18 @@ export async function renderEnergy({ meter, latest, id, signal }) {
   if (!latest) return noReading();
   const m = valueMap(latest.values);
   const billing = await latestProfileRow(id, PROFILE.billing, signal);
+  // Energy registers: from the reading, else from the current billing row
+  // (some meters leave them out of the association the device reads).
+  const energyObis = [O.kwh, O.kwhExport, O.kvah, O.kvahExport, O.kvarhLag, O.kvarhLead];
+  const energyFromBilling = !energyObis.some((obis) => m.has(obis)) && billing;
+  const em = energyFromBilling ? billing.values : m;
   const registers = [
-    param('Active import', m, O.kwh, { digits: 2 }),
-    param('Active export', m, O.kwhExport, { digits: 2 }),
-    param('Apparent import', m, O.kvah, { digits: 2 }),
-    param('Apparent export', m, O.kvahExport, { digits: 2 }),
-    param('Reactive lag', m, O.kvarhLag, { digits: 2 }),
-    param('Reactive lead', m, O.kvarhLead, { digits: 2 }),
+    param('Active import', em, O.kwh, { digits: 2 }),
+    param('Active export', em, O.kwhExport, { digits: 2 }),
+    param('Apparent import', em, O.kvah, { digits: 2 }),
+    param('Apparent export', em, O.kvahExport, { digits: 2 }),
+    param('Reactive lag', em, O.kvarhLag, { digits: 2 }),
+    param('Reactive lead', em, O.kvarhLead, { digits: 2 }),
   ].join('');
 
   // Maximum demand: value from the reading, time of occurrence from the
@@ -133,8 +138,8 @@ export async function renderEnergy({ meter, latest, id, signal }) {
   const touFromBilling = tou && !m.has(tozKwh(1)) && billing;
 
   return `<div class="${staleClass(meter)}">
-    <h2 class="section">Energy registers</h2>
-    ${registers ? `${capturedLine(meter, latest)}<div class="params">${registers}</div>`
+    <h2 class="section">Energy registers ${energyFromBilling && registers ? `<small>from the current billing row ${esc(billing.t || '')}</small>` : ''}</h2>
+    ${registers ? `${energyFromBilling ? '' : capturedLine(meter, latest)}<div class="params">${registers}</div>`
       : stateBox({ kind: 'info', title: 'No energy registers', detail: 'The latest reading carried no energy values.' })}
 
     <h2 class="section">Maximum demand ${billing ? `<small>occurrence times from the billing row ${esc(billing.t || '')}</small>` : ''}</h2>
