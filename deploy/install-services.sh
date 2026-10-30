@@ -34,7 +34,7 @@ for dir in ota_server dlms_server; do
   fi
   if [ ! -d "$REPO/$dir/node_modules" ]; then
     echo "Installing $dir dependencies"
-    (cd "$REPO/$dir" && npm install --omit=dev --no-audit --no-fund)
+    (cd "$REPO/$dir" && npm ci --omit=dev --no-audit --no-fund)
   fi
   mkdir -p "$REPO/$dir/data"
 done

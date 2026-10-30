@@ -115,7 +115,7 @@ if (-not $ServerOnly) {
   Write-Host "`nCommits going to ${Base}:" -ForegroundColor White
   git log --oneline "origin/$Base..HEAD"
   if (-not $Yes) {
-    $answer = Read-Host "`nMerge #$($pr.number) into $Base and deploy to $Server? [y/N]"
+    $answer = Read-Host "`nMerge #$($pr.number) into $Base and deploy to ${Server}? [y/N]"
     if ($answer -notmatch '^(y|yes)$') { Write-Host 'Not merged. The pull request stays open.'; exit 0 }
   }
 
@@ -146,7 +146,9 @@ for pair in "ota_server:amr-ota" "dlms_server:amr-dlms"; do
   dir=${pair%%:*}; unit=${pair##*:}
   if grep -qE "^$dir/package(-lock)?\.json$" <<< "$changed"; then
     echo "Installing $dir dependencies"
-    (cd "$dir" && npm install --omit=dev --no-audit --no-fund --silent)
+    # npm ci installs exactly the lock file and never rewrites it, so the
+    # checkout stays clean for the next pull.
+    (cd "$dir" && npm ci --omit=dev --no-audit --no-fund --silent)
   fi
   if grep -qE "^($dir/|shared/|deploy/)" <<< "$changed"; then restart+=("$unit"); fi
 done
