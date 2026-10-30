@@ -158,7 +158,9 @@ export async function renderEnergy({ meter, latest, id, signal }) {
     <h2 class="section">Time-of-day zones ${touFromBilling ? `<small>from the current billing row ${esc(billing.t || '')}; zones without energy are hidden</small>` : '<small>zones without energy are hidden</small>'}</h2>
     <div class="panel">${tou
       ? `<div class="tscroll"><table class="cards"><thead><tr><th>Zone</th><th class="num">Active energy</th><th class="num">Apparent energy</th></tr></thead><tbody>${tou}</tbody></table></div>`
-      : stateBox({ title: 'No time-of-day zone data', detail: 'Zone values arrive with the billing profile.' })}</div>
+      : billing
+        ? stateBox({ title: 'This meter does not report time-of-day zones', detail: 'Neither its readings nor its billing profile carry zone registers.' })
+        : stateBox({ title: 'No time-of-day zone data', detail: 'Zone values arrive with the billing profile.' })}</div>
   </div>`;
 }
 
