@@ -1,0 +1,32 @@
+%% modem_ensure() - firmware/modem.ino L342-383; modem_init L116-146; modem_autoApn L244-293
+flowchart TB
+  A(["modem_ensure()"]):::term --> B{"modemReady, no down notice,<br/>AT answers within 3 tries?"}
+  B -->|"yes"| B1(["return true"]):::term
+  B -->|"no"| C["ok = modem_init()"]:::net
+  C --> D{"ok?"}
+  D -->|"no, pulses left (max 2) and AT silent"| E["PWRKEY pulse 800 ms<br/>wait up to 20 s for AT"]:::err
+  E --> E1{"module booted?"}
+  E1 -->|"yes"| C
+  E1 -->|"no"| D
+  D -->|"yes"| F(["modemReady = true; return true"]):::term
+  D -->|"no, gave up"| G{"AT answers (1 try)?"}
+  G -->|"yes"| G1(["network not ready: return false,<br/>readings stay queued"]):::err
+  G -->|"no"| H{"silent for more than 2 h?"}
+  H -->|"yes"| H1(["ESP.restart()"]):::term
+  H -->|"no"| H2(["start / keep silence timer, return false"]):::err
+  subgraph INIT["modem_init(): APN selection when apn = auto"]
+    I1["saved APN for this SIM ICCID"]:::net --> I2["operator APN (QSPN / COPS) from APN_TABLE"]:::net
+    I2 --> I3["next APN_TABLE entry, finally empty APN"]:::net
+    I3 --> I4{"modem_tryApn: CFUN=4, CGDCONT, CFUN=1,<br/>CGATT within 60 s, QIACT"}
+    I4 -->|"OK"| I5["save APN + ICCID in NVS"]:::data
+    I4 -->|"refused"| I3
+    I4 -->|"no network"| I6["stop: another APN will not help"]:::err
+  end
+  classDef fw fill:#dbeafe,stroke:#1d4ed8,color:#0f172a
+  classDef net fill:#dcfce7,stroke:#15803d,color:#0f172a
+  classDef cloud fill:#ffedd5,stroke:#c2410c,color:#0f172a
+  classDef data fill:#ede9fe,stroke:#6d28d9,color:#0f172a
+  classDef ota fill:#ccfbf1,stroke:#0f766e,color:#0f172a
+  classDef err fill:#fee2e2,stroke:#b91c1c,color:#0f172a
+  classDef missing fill:#f8fafc,stroke:#94a3b8,stroke-dasharray:5 4,color:#475569
+  classDef term fill:#1e293b,stroke:#1e293b,color:#ffffff

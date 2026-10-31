@@ -1,0 +1,59 @@
+%% Diagram 5 - Data upload over TCP (device push only)
+%% Device: firmware/log_bridge.ino lb_upload() L225-296, modem.ino L342-560
+%% Server: dlms_server/src/tcp-server.js L24-122, framing.js, verify.js,
+%%         reading.js, db.js saveReading L210-234, log-store.js append L26-35
+sequenceDiagram
+  autonumber
+  participant F as Firmware<br/>lb_upload()
+  participant E as EC200U modem<br/>(AT over UART2)
+  participant N as LTE network
+  participant S as dlms_server<br/>tcp-server.js :7001
+  participant P as framing.js / verify.js /<br/>reading.js
+  participant D as SQLite amr-data.db<br/>+ logs/ files
+
+  Note over F,D: Direction: the device always initiates. The server never polls the meter<br/>and sends no commands - it only answers each message with one reply line.
+
+  F->>F: called after every read cycle (meter UART idle)
+  F->>E: modem_ensure(): AT x3, else modem_init / PWRKEY (see Diagram 10)
+  F->>F: TraceLog.setCapture(false)
+  F->>E: AT+QICLOSE=0, AT+QIACT? (PDP), AT+QIOPEN=1,0,"TCP",DATA_SERVER_HOST,7001
+  E->>N: TCP SYN
+  N->>S: connect (maxConnections 200, idle timeout 120 s)
+  E-->>F: URC +QIOPEN: 0,0 (wait 30 s, one retry if URC never arrives)
+
+  loop each queued READING, oldest first
+    F->>E: AT+QISEND=0,n then header line (wait for '>' 5 s, SEND OK 10 s)
+    Note right of F: {"type":"READING","deviceId":IMEI,"boot":B,"seq":N,<br/>"fw":"2.0.12","ageS":A,"bytes":M,"sig":HMAC}\n
+    F->>E: body in 1024-byte chunks (AT+QISEND, max 1460 per send)
+    E->>S: TCP stream
+    S->>P: FrameParser.push(): header JSON, validateHeader, wait for M bytes
+    P->>P: checkMessage(): HMAC(device key, "READING|id|boot|seq|sha256(body)")<br/>unsigned accepted as unverified unless REQUIRE_SIGNED
+    P->>P: parseReading(): ret, values (<= 2000), profiles (<= 50, cols <= 256, rows <= 5000)
+    P->>D: db.saveReading() transaction:<br/>dedupe (device, boot, seq), upsert profile rows by row_key
+    S-->>E: {"ok":true,"type":"READING","seq":N[,"dup":true][,"skipped":K]}\n
+    E-->>F: AT+QIRD polling, reply line within 15 s
+    alt ok:true
+      F->>F: rd_pop(true): free body, mk_commit() markers to NVS
+    else ok:false with seq (bad_signature, invalid reading)
+      F->>F: rd_reject(): drop item, roll markers back (rows re-read)
+    else no reply / framing error / store_failed
+      F->>F: stop: item stays queued for the next cycle
+    end
+  end
+
+  opt trace pending and all readings sent
+    F->>E: LOG header {"type":"LOG",...,"bytes":M,"dropped":D,"uptimeS":U,"sig":...} + up to 128 KB trace
+    E->>S: TCP stream
+    S->>P: verify signature, isDuplicateLog(device, boot, seq)
+    P->>D: logs.append() to logs/{id}/{date}.log + log_uploads row
+    S-->>E: {"ok":true,"type":"LOG","seq":N} (not read by the device)
+    F->>F: TraceLog.consume(bytes), seq++
+  end
+
+  F->>E: AT+QICLOSE=0 (quiet window 1.5 s before next open)
+  F->>F: TraceLog.setCapture(true), print upload result
+
+  alt any send / open failure
+    F->>F: g_ota.modemReady = false (AT re-init next time), queue kept
+  end
+  Note over S: Framing error: server replies {"ok":false,"error":...} and closes.<br/>Socket idle 120 s: destroyed. Partial message on close: discarded.

@@ -1,0 +1,25 @@
+%% reg_run() - firmware/register.ino L182-253; server side: ota_server/src/routes/device.js L127-171, regkey.js
+flowchart TB
+  A(["reg_run()"]):::term --> B{"SERVER_REG_PUBKEY_HEX is 130 hex?"}
+  B -->|"no"| B1(["state off; return intervalS"]):::err
+  B -->|"yes"| C{"IMEI known?"}
+  C -->|"no"| C1(["return 900 s"]):::err
+  C -->|"yes"| D["load P-256 key pair from NVS reg_key,<br/>or create and save one"]:::ota
+  D --> E["POST /ota/register with device_id, current_ver, pub"]:::net
+  E --> F{"HTTP result"}
+  F -->|"network error"| F1(["modemReady = false; return 900 s"]):::err
+  F -->|"403"| F2(["rejected or off: return intervalS"]):::err
+  F -->|"other non-200"| F3(["return 900 s"]):::err
+  F -->|"200 pending"| G(["return retry_s clamped to 60..120 s"]):::ota
+  F -->|"200 approved"| H["reg_unwrap(): z = ECDH(priv, server pub)<br/>k = SHA256(z, IMEI); AES-256-GCM decrypt, aad IMEI"]:::ota
+  H --> I{"decrypts and cfg_set secret ok?"}
+  I -->|"no"| I1(["state error; return 900 s"]):::err
+  I -->|"yes"| J["erase reg_key; state approved"]:::ota --> K(["return 0"]):::term
+  classDef fw fill:#dbeafe,stroke:#1d4ed8,color:#0f172a
+  classDef net fill:#dcfce7,stroke:#15803d,color:#0f172a
+  classDef cloud fill:#ffedd5,stroke:#c2410c,color:#0f172a
+  classDef data fill:#ede9fe,stroke:#6d28d9,color:#0f172a
+  classDef ota fill:#ccfbf1,stroke:#0f766e,color:#0f172a
+  classDef err fill:#fee2e2,stroke:#b91c1c,color:#0f172a
+  classDef missing fill:#f8fafc,stroke:#94a3b8,stroke-dasharray:5 4,color:#475569
+  classDef term fill:#1e293b,stroke:#1e293b,color:#ffffff

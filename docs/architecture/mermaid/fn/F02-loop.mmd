@@ -1,0 +1,37 @@
+%% loop() - firmware/firmware.ino L1728-1796; sched_due/sched_done schedule.ino L87-160
+flowchart TB
+  A(["loop()"]):::term --> B["cmd_pollSerial(); ble_poll(); otaBle_poll()"]:::data
+  B --> C{"BLE interval request?"}
+  C -->|"yes"| C1["cfg_set read; ble_setSettings()"]:::fw --> D
+  C -->|"no"| D{"BLE profile request?"}
+  D -->|"yes"| D1["cfg_set profile; ble_setSettings()"]:::fw --> E
+  D -->|"no"| E{"ble_takeReadRequest()?"}
+  E -->|"yes"| E1["mpw_forceSearch()"]:::fw --> F
+  E -->|"no"| F{"firstRun or BLE read?"}
+  F -->|"yes"| F1["flags = CYCLE_ALL"]:::fw
+  F -->|"no"| F2["flags = sched_due()"]:::fw
+  F1 --> G
+  F2 --> G{"flags != 0?"}
+  G -->|"no"| O
+  G -->|"yes"| H["firstRun = false; ble_readingBegin() if values; rd_begin()"]:::data
+  H --> I["ret = com_readAllObjects(0.0.43.1.0.255, flags)"]:::fw
+  I --> J["com_close()"]:::fw
+  J --> K["ble_readingEnd(ret) if values; rd_end(ret)"]:::data
+  K --> L["sched_done(flags, ret == 0)"]:::fw
+  L --> M["lb_upload()"]:::net
+  M --> O{"not busy and ota_isDue()?"}
+  O -->|"yes"| P["ota_run() (may ESP.restart)"]:::ota --> Z
+  O -->|"no"| Z(["return (core calls loop again)"]):::term
+  subgraph SD["sched_due()"]
+    S1{"meter clock synced?"}
+    S1 -->|"yes"| S2["VALUES if now >= nextRead<br/>PROFILES if now >= nextProfile<br/>DAILY with first cycle of a new day"]:::fw
+    S1 -->|"no"| S3["uptime since last read >= readS / profileMin"]:::fw
+  end
+  classDef fw fill:#dbeafe,stroke:#1d4ed8,color:#0f172a
+  classDef net fill:#dcfce7,stroke:#15803d,color:#0f172a
+  classDef cloud fill:#ffedd5,stroke:#c2410c,color:#0f172a
+  classDef data fill:#ede9fe,stroke:#6d28d9,color:#0f172a
+  classDef ota fill:#ccfbf1,stroke:#0f766e,color:#0f172a
+  classDef err fill:#fee2e2,stroke:#b91c1c,color:#0f172a
+  classDef missing fill:#f8fafc,stroke:#94a3b8,stroke-dasharray:5 4,color:#475569
+  classDef term fill:#1e293b,stroke:#1e293b,color:#ffffff

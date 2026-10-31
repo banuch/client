@@ -1,0 +1,30 @@
+%% dlms_server message handling: src/tcp-server.js handle() L31-77, src/db.js saveReading L210-234
+flowchart TB
+  A(["FrameParser onMessage(header, body)"]):::term --> B["checkMessage(): no sig = unverified (or signature_required);<br/>no MASTER_SECRET = unverified"]:::cloud
+  B --> C{"ok?"}
+  C -->|"no"| C1(["reply ok:false, seq, bad_signature or signature_required"]):::err
+  C -->|"yes"| D{"type"}
+  D -->|"READING"| E["parseReading(body)"]:::cloud
+  E --> E1{"valid?"}
+  E1 -->|"no"| E2(["reply ok:false, seq, error"]):::err
+  E1 -->|"yes"| F1
+  subgraph TX["db.saveReading: one SQLite transaction"]
+    F1["touchDevice (upsert devices)"]:::data --> F2{"reading (device, boot, seq) exists?"}
+    F2 -->|"yes"| F3["stored = false"]:::data
+    F2 -->|"no"| F4["insert readings + reading_values;<br/>update last_reading_id if newer"]:::data
+    F4 --> F5["per profile: upsert profile_columns;<br/>per row: key open (current billing month),<br/>t:time or h:hash; upsert profile_rows"]:::data
+  end
+  F3 --> G
+  F5 --> G(["reply ok:true, seq, dup?, skipped?"]):::term
+  D -->|"LOG"| H{"isDuplicateLog(device, boot, seq)?"}
+  H -->|"yes"| H1(["touchDevice; reply ok:true, dup:true"]):::term
+  H -->|"no"| H2["logs.append() to day file; saveLog()"]:::data --> H3(["reply ok:true, type LOG"]):::term
+  A -.->|"exception thrown"| Z(["reply ok:false, store_failed"]):::err
+  classDef fw fill:#dbeafe,stroke:#1d4ed8,color:#0f172a
+  classDef net fill:#dcfce7,stroke:#15803d,color:#0f172a
+  classDef cloud fill:#ffedd5,stroke:#c2410c,color:#0f172a
+  classDef data fill:#ede9fe,stroke:#6d28d9,color:#0f172a
+  classDef ota fill:#ccfbf1,stroke:#0f766e,color:#0f172a
+  classDef err fill:#fee2e2,stroke:#b91c1c,color:#0f172a
+  classDef missing fill:#f8fafc,stroke:#94a3b8,stroke-dasharray:5 4,color:#475569
+  classDef term fill:#1e293b,stroke:#1e293b,color:#ffffff

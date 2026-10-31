@@ -1,0 +1,31 @@
+%% lb_upload() - firmware/log_bridge.ino L225-296 (lb_sendReading L115, lb_readReply L144, lb_sendLog L195)
+flowchart TB
+  A(["lb_upload()"]):::term --> B{"DATA_SERVER_HOST empty, or<br/>no trace and no readings?"}
+  B -->|"yes"| X(["return"]):::term
+  B -->|"no"| C["total = min(trace pending, 128 KB)"]:::data
+  C --> D["modemOk = modem_ensure()<br/>TraceLog.setCapture(false)"]:::net
+  D --> E{"modemOk and modem_tcpOpen(host, 7001)?"}
+  E -->|"no"| R
+  E -->|"yes"| F{"queued item and ok?"}
+  F -->|"yes"| G["lb_sendReading(): header + sig, body in 1 KB chunks"]:::net
+  G --> H["lb_readReply(): reply line within 15 s"]:::net
+  H --> I{"reply"}
+  I -->|"1: ok true"| I1["rd_pop(true): commit markers"]:::data --> F
+  I -->|"0: refused with seq"| I2["rd_reject()"]:::err --> F
+  I -->|"-1: none, framing, store_failed"| I3["ok = false"]:::err --> F
+  F -->|"queue empty or failed"| J{"ok and total > 0?"}
+  J -->|"yes"| K["lb_sendLog(total, dropped)"]:::net --> K1{"sent?"}
+  K1 -->|"yes"| K2["TraceLog.consume(total); clearDropped; seq++"]:::data --> L
+  K1 -->|"no"| L
+  J -->|"no"| L["modem_tcpClose()"]:::net
+  L --> R{"ok?"}
+  R -->|"no"| R1["g_ota.modemReady = false"]:::err --> S
+  R -->|"yes"| S["TraceLog.setCapture(true); print notes and result"]:::data --> X
+  classDef fw fill:#dbeafe,stroke:#1d4ed8,color:#0f172a
+  classDef net fill:#dcfce7,stroke:#15803d,color:#0f172a
+  classDef cloud fill:#ffedd5,stroke:#c2410c,color:#0f172a
+  classDef data fill:#ede9fe,stroke:#6d28d9,color:#0f172a
+  classDef ota fill:#ccfbf1,stroke:#0f766e,color:#0f172a
+  classDef err fill:#fee2e2,stroke:#b91c1c,color:#0f172a
+  classDef missing fill:#f8fafc,stroke:#94a3b8,stroke-dasharray:5 4,color:#475569
+  classDef term fill:#1e293b,stroke:#1e293b,color:#ffffff

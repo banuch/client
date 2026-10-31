@@ -1,0 +1,28 @@
+%% pg_collect(p, kind, cols, count, buffer, period, mark, nowS) - firmware/profiles.ino L746-891
+flowchart TB
+  A(["pg_collect()"]):::term --> B{"buffer is an array with rows,<br/>1..256 columns?"}
+  B -->|"no"| X(["return 0"]):::term
+  B -->|"yes"| C["tc = time column: billing date for billing,<br/>else clock 0.0.1.0.0.255"]:::fw
+  C --> D["Pass 1: row time per row; empty clock cell =<br/>previous + capture period; find newest row"]:::fw
+  D --> E["rd_profileBegin + rd_profileColumn per column"]:::data
+  E --> F["Pass 2: next row"]:::fw
+  F --> G{"send row?<br/>block / daily / event: time > mark<br/>billing: newest or time > mark<br/>others: always"}
+  G -->|"no"| F
+  G -->|"yes"| H["advance newMark, except the open billing row<br/>and rows stamped later than now + 1 day"]:::data
+  H --> I["rd_profileRowBegin(t); cells: scaled number / text / null;<br/>event name for event logs; rd_profileRowEnd"]:::data
+  I --> F
+  F -->|"no rows left"| J{"queued > 0?"}
+  J -->|"yes"| J1["rd_profileEnd()"]:::data
+  J -->|"no"| J2["rd_profileCancel()"]:::data
+  J1 --> K
+  J2 --> K{"marked kind and newMark changed?"}
+  K -->|"yes"| K1["mk_advance(key, newMark):<br/>RAM now, NVS after the server ack"]:::data --> Y
+  K -->|"no"| Y(["return queued"]):::term
+  classDef fw fill:#dbeafe,stroke:#1d4ed8,color:#0f172a
+  classDef net fill:#dcfce7,stroke:#15803d,color:#0f172a
+  classDef cloud fill:#ffedd5,stroke:#c2410c,color:#0f172a
+  classDef data fill:#ede9fe,stroke:#6d28d9,color:#0f172a
+  classDef ota fill:#ccfbf1,stroke:#0f766e,color:#0f172a
+  classDef err fill:#fee2e2,stroke:#b91c1c,color:#0f172a
+  classDef missing fill:#f8fafc,stroke:#94a3b8,stroke-dasharray:5 4,color:#475569
+  classDef term fill:#1e293b,stroke:#1e293b,color:#ffffff

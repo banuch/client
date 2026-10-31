@@ -1,0 +1,88 @@
+%% Diagram 6 - OTA firmware update flow
+%% Device: firmware/ota_client.ino ota_run L293-359, ota_check L133-181,
+%%         ota_download L185-262, ota_reportBootResult L280-290, register.ino reg_run L182-253
+%% Server: ota_server/src/routes/device.js L75-221, hmac.js, resolver.js, db.js tokens
+flowchart TB
+  classDef fw fill:#dbeafe,stroke:#1d4ed8,color:#0f172a
+  classDef net fill:#dcfce7,stroke:#15803d,color:#0f172a
+  classDef cloud fill:#ffedd5,stroke:#c2410c,color:#0f172a
+  classDef data fill:#ede9fe,stroke:#6d28d9,color:#0f172a
+  classDef ota fill:#ccfbf1,stroke:#0f766e,color:#0f172a
+  classDef err fill:#fee2e2,stroke:#b91c1c,color:#0f172a
+  classDef missing fill:#f8fafc,stroke:#94a3b8,stroke-dasharray:5 4,color:#475569
+  classDef term fill:#1e293b,stroke:#1e293b,color:#ffffff
+
+  A0(["loop(): ota_isDue()<br/>nextCheckMs reached or CHECK_OTA command"]):::term
+  A1["ota_run(): busy = true"]:::ota
+  A2{"modem_ensure() OK?"}
+  A3{"Device key in NVS?<br/>(64 hex chars)"}
+  R1["reg_run(): POST /ota/register<br/>{device_id, current_ver, P-256 pub}"]:::ota
+  R2{"Server reply"}
+  R3["pending: poll again in 60..120 s"]:::ota
+  R4["approved: ECDH(priv, server pub) -> SHA256(z, IMEI)<br/>AES-256-GCM decrypt key (aad = IMEI) -> cfg_set secret"]:::ota
+  R5["403 rejected / registration_off:<br/>wait g_cfg.intervalS"]:::err
+
+  B1{"ota_ready(): IMEI known and<br/>network clock (AT+CCLK) synced?"}
+  B2["POST /ota/check {device_id, current_ver, ts,<br/>sig = HMAC(key, imei|ver|ts)}"]:::ota
+  subgraph SRV["ota_server /ota/check (routes/device.js L75)"]
+    V1{"verifyRequest: IMEI format, |now - ts| <= 300 s,<br/>HMAC valid, not replayed?"}
+    V2{"Device known (unknown + valid sig is added<br/>unless REGISTRATION_MODE=off), approved, enabled?"}
+    V3["resolveTarget(): pinned_version, else channel release<br/>only if newer (MAJOR.MINOR.PATCH compare)"]:::cloud
+    V4{"Target release and .bin file exist?"}
+    V5["issueToken(): 16 random bytes, single use, TTL 600 s<br/>offer sig = HMAC(key, imei|ts|ver|size|md5|token)"]:::cloud
+    V6["{update_available:false, check_interval_s, reason}"]:::cloud
+  end
+  B3{"Offer signature valid and<br/>md5 32 hex, token set, size >= 64 KB?"}
+  B4["Schedule next check:<br/>server check_interval_s or g_cfg.intervalS"]:::ota
+
+  D1{"Image fits the inactive OTA slot?"}
+  D2["GET /ota/firmware?device_id&token (new TCP socket)"]:::ota
+  subgraph SRV2["ota_server /ota/firmware (L173)"]
+    T1{"consumeToken(): exists, same IMEI,<br/>unused, not expired?"}
+    T2["Stream fw_ver.bin with Content-Length<br/>(never chunked), log download_start / sent"]:::cloud
+  end
+  D3{"HTTP 200 and Content-Length == offered size?"}
+  D4["esp_ota_begin(next slot)"]:::ota
+  D5["loop: http_read 1024 B -> esp_ota_write + MD5 update<br/>(HTTP idle timeout 30 s, no resume, no per-chunk ACK)"]:::ota
+  D6{"bytes == size and MD5 == offer.md5?"}
+  D7{"esp_ota_end() image validation OK and<br/>esp_ota_set_boot_partition() OK?"}
+  D8["NVS pend_ver = new version<br/>POST /ota/report status = flashed"]:::ota
+  D9(["ESP.restart()"]):::term
+  D10["setup(): ota_reportBootResult()<br/>pend_ver == FW_VERSION -> report running<br/>else -> report failed 'booted X instead'"]:::ota
+
+  F1["esp_ota_abort() if begun; running image untouched<br/>POST /ota/report failed / md5_fail<br/>retry in CHECK_RETRY_S = 900 s"]:::err
+  F2["Retry in 900 s<br/>(check_network_error also forces modem re-init)"]:::err
+  RB["Rollback after a crashing new image:<br/>no esp_ota_mark_app_valid_cancel_rollback() call;<br/>bootloader rollback setting Not verified"]:::missing
+
+  A0 --> A1 --> A2
+  A2 -->|"no"| F2
+  A2 -->|"yes"| A3
+  A3 -->|"no"| R1 --> R2
+  R2 -->|"pending"| R3
+  R2 -->|"approved"| R4 --> B1
+  R2 -->|"403"| R5
+  R2 -->|"network error / 429 / 503"| F2
+  A3 -->|"yes"| B1
+  B1 -->|"no"| F2
+  B1 -->|"yes"| B2 --> V1
+  V1 -->|"no: 400 / 401"| F2
+  V1 -->|"yes"| V2
+  V2 -->|"no: 403"| F2
+  V2 -->|"approved but disabled"| V6
+  V2 -->|"yes"| V3 --> V4
+  V4 -->|"no target / missing"| V6
+  V4 -->|"yes"| V5 --> B3
+  V6 --> B4
+  B3 -->|"invalid"| F2
+  B3 -->|"valid"| D1
+  D1 -->|"no"| F1
+  D1 -->|"yes"| D2 --> T1
+  T1 -->|"no: 401 / 410"| F1
+  T1 -->|"yes"| T2 --> D3
+  D3 -->|"no"| F1
+  D3 -->|"yes"| D4 --> D5 --> D6
+  D6 -->|"no"| F1
+  D6 -->|"yes"| D7
+  D7 -->|"no"| F1
+  D7 -->|"yes"| D8 --> D9 --> D10
+  D10 -.-> RB

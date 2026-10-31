@@ -1,0 +1,87 @@
+%% Diagram 1 - Complete system architecture (source: README.md, firmware/config.h,
+%% firmware/firmware.ino, firmware/log_bridge.ino, firmware/ota_client.ino,
+%% dlms_server/src/*, ota_server/src/*, deploy/*)
+flowchart LR
+  classDef fw fill:#dbeafe,stroke:#1d4ed8,color:#0f172a
+  classDef net fill:#dcfce7,stroke:#15803d,color:#0f172a
+  classDef cloud fill:#ffedd5,stroke:#c2410c,color:#0f172a
+  classDef data fill:#ede9fe,stroke:#6d28d9,color:#0f172a
+  classDef ota fill:#ccfbf1,stroke:#0f766e,color:#0f172a
+  classDef err fill:#fee2e2,stroke:#b91c1c,color:#0f172a
+  classDef missing fill:#f8fafc,stroke:#94a3b8,stroke-dasharray:5 4,color:#475569
+
+  subgraph SITE["Field site"]
+    direction TB
+    METER["IS 15959 DLMS/COSEM energy meter<br/>HDLC, LN referencing, LLS password<br/>client addr 32, server logical 1"]:::fw
+    MAX["MAX3232 RS-232 level shifter<br/>UART1 9600 8N1 + DTR (GPIO6)"]:::fw
+    subgraph DEV["AMR device: ESP32-S3 (firmware/, FW 2.0.12)"]
+      direction TB
+      FW["Arduino sketch<br/>setup() / loop()<br/>Gurux DLMS client (src/*.c)"]:::fw
+      Q[("PSRAM: READING queue (48)<br/>trace ring buffer (256 KB)")]:::fw
+      NVS[("NVS: otacfg, pgmark, pgmarkv<br/>config, device key, markers,<br/>meter password list")]:::fw
+      SLOT[("Flash: two OTA app slots<br/>partition app3M_fat9M_16MB")]:::ota
+    end
+    EC["Quectel EC200U 4G modem<br/>UART2 9600 (GPIO17/18)<br/>PWRKEY via GPIO10"]:::net
+    PHONE["Phone app / tools/ble-configurator<br/>(Web Bluetooth)"]:::data
+  end
+
+  CELL(("LTE network<br/>PDP context, APN auto<br/>public Internet")):::net
+
+  subgraph VM["Cloud VM (deploy/install-services.sh, systemd)"]
+    direction TB
+    subgraph DS["dlms_server (Node 18+, Express, better-sqlite3)"]
+      TCP["Device port TCP 7001<br/>tcp-server.js + framing.js<br/>verify.js + reading.js"]:::cloud
+      WEB["Web page + REST API HTTP 7002<br/>http-server.js, meters.js"]:::cloud
+      DDB[("SQLite amr-data.db (WAL)<br/>devices, readings, reading_values,<br/>profile_columns, profile_rows, log_uploads")]:::data
+      LOGS[("logs/{deviceId}/{date}.log")]:::data
+    end
+    subgraph OS["ota_server (Node 18+, Express, better-sqlite3)"]
+      OTAAPI["Device API HTTP 7000 /ota/*<br/>register, check, firmware, report"]:::ota
+      DASH["Admin dashboard + /api/*<br/>releases, channels, devices, users"]:::ota
+      ODB[("SQLite: releases, channels, devices,<br/>tokens, events, users, sessions")]:::data
+      BIN[("firmware/fw_{ver}.bin<br/>server_reg_key.pem")]:::data
+    end
+    SH["shared/device-key.js<br/>device key = HMAC-SHA256(MASTER_SECRET, IMEI)"]:::cloud
+  end
+
+  OPS["Operator browser<br/>(meter dashboard)"]:::data
+  ADM["Admin browser<br/>(OTA dashboard)"]:::data
+
+  METER <-->|"DLMS/COSEM over HDLC (request / response)"| MAX
+  MAX <--> FW
+  FW <--> Q
+  FW <--> NVS
+  FW -->|"esp_ota_write"| SLOT
+  FW <-->|"AT commands, AT+QISEND / AT+QIRD"| EC
+  PHONE <-.->|"BLE GATT: meter service + NUS command service"| FW
+  EC <-->|"LTE"| CELL
+
+  CELL -->|"TCP push after each read cycle:<br/>READING + LOG frames (JSON header + body, HMAC sig)"| TCP
+  TCP -->|"one reply line per message {ok, seq}"| CELL
+  CELL -->|"HTTP/1.1 polling (device initiated):<br/>POST register / check / report, GET firmware"| OTAAPI
+  OTAAPI -->|"signed offer, wrapped key, .bin stream"| CELL
+
+  TCP --> DDB
+  TCP --> LOGS
+  WEB --> DDB
+  WEB --> LOGS
+  OTAAPI --> ODB
+  OTAAPI --> BIN
+  DASH --> ODB
+  DASH --> BIN
+  TCP -. "verify sig" .-> SH
+  OTAAPI -. "sign / verify" .-> SH
+
+  OPS -->|"session cookie login"| WEB
+  ADM -->|"upload .bin, point channel, approve device"| DASH
+
+  subgraph LEGEND["Legend"]
+    direction LR
+    L1["Firmware / hardware"]:::fw
+    L2["Communication / network"]:::net
+    L3["Cloud / backend"]:::cloud
+    L4["Database / application"]:::data
+    L5["OTA"]:::ota
+    L7["Not implemented / not verified"]:::missing
+    L1 ~~~ L2 ~~~ L3 ~~~ L4 ~~~ L5 ~~~ L7
+  end

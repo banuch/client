@@ -1,0 +1,38 @@
+%% readDLMSPacket(data, reply) L310-378 and com_readDataBlock(messages, reply) L380-417 (firmware/firmware.ino)
+flowchart TB
+  subgraph RB["com_readDataBlock(messages, reply)"]
+    direction TB
+    A1(["for each message frame"]):::term --> A2["readDLMSPacket(frame, reply)"]:::fw
+    A2 --> A3{"ret != OK?"}
+    A3 -->|"yes"| A9(["return ret"]):::term
+    A3 -->|"no"| A4{"reply_isMoreData?<br/>(HDLC segment / block transfer)"}
+    A4 -->|"yes"| A5["Client.ReceiverReady(moreData)<br/>RR / next-block request"]:::fw --> A2
+    A4 -->|"no, more frames"| A1
+    A4 -->|"no, done"| A9
+  end
+  subgraph RP["readDLMSPacket(data, reply)"]
+    direction TB
+    B1(["start"]):::term --> B2{"data size == 0?"}
+    B2 -->|"yes"| B9(["return OK"]):::term
+    B2 -->|"no"| B3["drain UART1 rx, write frame<br/>deadline = now + 10 s x (3 + 2)"]:::fw
+    B3 --> B4{"deadline passed?"}
+    B4 -->|"yes"| B10(["return RECEIVE_FAILED"]):::err
+    B4 -->|"no"| B5["com_readSerialPort(0x7E): read until end flag,<br/>10 s per call, grow frameData as needed"]:::fw
+    B5 --> B6{"timeout?"}
+    B6 -->|"yes, resend below 3"| B7["resend++, drain rx, write frame again"]:::err --> B4
+    B6 -->|"yes, resend == 3"| B11(["return SEND_FAILED"]):::err
+    B6 -->|"no"| B8["Client.GetData(frameData, reply)<br/>HDLC + APDU parse"]:::fw
+    B8 --> B12{"error other than FALSE (incomplete)?"}
+    B12 -->|"yes"| B13(["return error"]):::err
+    B12 -->|"no"| B14{"reply complete?"}
+    B14 -->|"no"| B4
+    B14 -->|"yes"| B9
+  end
+  classDef fw fill:#dbeafe,stroke:#1d4ed8,color:#0f172a
+  classDef net fill:#dcfce7,stroke:#15803d,color:#0f172a
+  classDef cloud fill:#ffedd5,stroke:#c2410c,color:#0f172a
+  classDef data fill:#ede9fe,stroke:#6d28d9,color:#0f172a
+  classDef ota fill:#ccfbf1,stroke:#0f766e,color:#0f172a
+  classDef err fill:#fee2e2,stroke:#b91c1c,color:#0f172a
+  classDef missing fill:#f8fafc,stroke:#94a3b8,stroke-dasharray:5 4,color:#475569
+  classDef term fill:#1e293b,stroke:#1e293b,color:#ffffff

@@ -1,0 +1,81 @@
+%% Diagram 3 - Firmware program flow from power-on
+%% setup(): firmware/firmware.ino L1635-1726, loop(): L1728-1796
+%% modem_init(): firmware/modem.ino L116-146, cfg_load(): nvs_config.ino L6-22
+flowchart TB
+  classDef fw fill:#dbeafe,stroke:#1d4ed8,color:#0f172a
+  classDef net fill:#dcfce7,stroke:#15803d,color:#0f172a
+  classDef cloud fill:#ffedd5,stroke:#c2410c,color:#0f172a
+  classDef data fill:#ede9fe,stroke:#6d28d9,color:#0f172a
+  classDef ota fill:#ccfbf1,stroke:#0f766e,color:#0f172a
+  classDef err fill:#fee2e2,stroke:#b91c1c,color:#0f172a
+  classDef missing fill:#f8fafc,stroke:#94a3b8,stroke-dasharray:5 4,color:#475569
+  classDef term fill:#1e293b,stroke:#1e293b,color:#ffffff
+
+  PON(["Power ON / reset<br/>(ESP32-S3 boots the active OTA slot)"]):::term
+
+  subgraph S["setup()"]
+    direction TB
+    S1["TraceLog.begin 115200 (USB CDC)<br/>wait at most 3 s for a monitor<br/>alloc 256 KB PSRAM trace ring (16 KB fallback)"]:::fw
+    S2["EEPROM.begin(4096)<br/>DTR GPIO6 output, de-asserted"]:::fw
+    S3["Client.init: LN, client 32, server 1,<br/>LLS auth, HDLC, max frame 1024, window 1"]:::fw
+    S4["meter_begin(9600, 8N1) on UART1<br/>(300 7E1 only for Mode-E optical: not used)"]:::fw
+    S5["cfg_load(): NVS otacfg -> g_cfg<br/>invalid / missing values replaced by defaults"]:::fw
+    S5D{"Config valid?"}
+    S5N["No failure path:<br/>each field falls back to config.h default"]:::err
+    S6["mpw_begin(): meter password list<br/>(NVS or METER_PASSWORDS_DEFAULT), saved match first"]:::fw
+    S7["ble_begin(), otaBle_init(), advertising<br/>'DLMS-Meter-XXXX'"]:::data
+    S8["Print FW version, running partition,<br/>reset reason"]:::err
+    S9["modem_hwInit(): PWRKEY pulse,<br/>UART2 9600, wait 5 s"]:::net
+    S10{"modem_init():<br/>AT answers within 10 tries?"}
+    S11["ATE0, CMEE=2, QSCLK=0, read IMEI,<br/>CPIN?, CFUN=1, CTZU=1, CSQ"]:::net
+    S12{"APN attach + PDP active?<br/>(auto: saved, operator, table, empty)"}
+    S13["g_ota.modemReady = true"]:::net
+    S14["g_ota.modemReady = false<br/>(retried later by modem_ensure)"]:::err
+    S15["ota_reportBootResult():<br/>report pending OTA version as running / failed"]:::ota
+    S16["lb_begin(): random boot id<br/>mk_checkEpoch(): one-time marker reset"]:::data
+    S17["Schedule first OTA check: now + 5 s"]:::ota
+  end
+
+  subgraph L["loop() - runs forever, single task, blocking calls"]
+    direction TB
+    L1["cmd_pollSerial(), ble_poll(), otaBle_poll()<br/>apply BLE interval / profile requests via cfg_set"]:::data
+    L2{"First run or BLE 'read'?"}
+    L3["flags = CYCLE_ALL<br/>(BLE read also forces password search)"]:::fw
+    L4["flags = sched_due()<br/>(meter-clock aligned, uptime until synced)"]:::fw
+    L5{"flags != 0?"}
+    L6["rd_begin(); ble_readingBegin()"]:::data
+    L7["com_readAllObjects(flags)<br/>see Diagram 4"]:::fw
+    L8["com_close(): HDLC DISC"]:::fw
+    L9["rd_end(ret): queue READING body<br/>(queued even when ret != 0)"]:::data
+    L10["sched_done(flags, ret == 0)"]:::fw
+    L11["lb_upload(): TCP 7001 push<br/>see Diagram 5"]:::net
+    L12{"OTA due and not busy?<br/>(timer or CHECK_OTA command)"}
+    L13["ota_run(): register / check / download<br/>see Diagram 6"]:::ota
+    L14{"Update flashed?"}
+    L15(["ESP.restart() into new slot"]):::term
+  end
+
+  PON --> S1 --> S2 --> S3 --> S4 --> S5 --> S5D
+  S5D -->|"yes"| S6
+  S5D -->|"no"| S5N --> S6
+  S6 --> S7 --> S8 --> S9 --> S10
+  S10 -->|"yes"| S11 --> S12
+  S10 -->|"no"| S14
+  S12 -->|"yes"| S13 --> S15 --> S16
+  S12 -->|"no: refused / no network"| S14
+  S14 --> S16
+  S16 --> S17 --> L1
+
+  L1 --> L2
+  L2 -->|"yes"| L3 --> L5
+  L2 -->|"no"| L4 --> L5
+  L5 -->|"yes"| L6 --> L7 --> L8 --> L9 --> L10 --> L11 --> L12
+  L5 -->|"no"| L12
+  L12 -->|"yes"| L13 --> L14
+  L12 -->|"no"| L1
+  L14 -->|"yes"| L15
+  L14 -->|"no: rescheduled"| L1
+  L15 -.-> PON
+
+  NOTE["Watchdog: none configured in sketch code.<br/>A blocking call that never returns is not recovered (Not verified: core default WDT)."]:::missing
+  L7 -.-> NOTE
