@@ -1,0 +1,60 @@
+%% Diagram 8 - How a meter value reaches the dashboard
+%% firmware.ino formatValue L1390-1465, reading_upload.ino, profiles.ino pg_collect L746-891
+%% dlms_server reading.js, db.js, meters.js, http-server.js, public/js/*
+flowchart TB
+  classDef fw fill:#dbeafe,stroke:#1d4ed8,color:#0f172a
+  classDef net fill:#dcfce7,stroke:#15803d,color:#0f172a
+  classDef cloud fill:#ffedd5,stroke:#c2410c,color:#0f172a
+  classDef data fill:#ede9fe,stroke:#6d28d9,color:#0f172a
+  classDef ota fill:#ccfbf1,stroke:#0f766e,color:#0f172a
+  classDef err fill:#fee2e2,stroke:#b91c1c,color:#0f172a
+  classDef missing fill:#f8fafc,stroke:#94a3b8,stroke-dasharray:5 4,color:#475569
+
+  subgraph DEVICE["On the device (all DLMS decoding happens here)"]
+    direction TB
+    A1["Raw HDLC frames from meter<br/>(GET.response APDU, A-XDR encoded)"]:::fw
+    A2["Gurux dlms_getData(): typed dlmsVARIANT<br/>(int, uint, float, octet-string, date-time, array)"]:::fw
+    A3["OBIS mapping: AvEntry.ln -> 'a.b.c.d.e.f'<br/>name from obis_names.h (IS 15959)"]:::fw
+    A4["Scaler/unit: value x 10^scaler from attr 3/4<br/>or scaler profile; W, Wh, var, VA -> k-units (/1000)"]:::fw
+    A5["JSON READING body<br/>values [{obis,name,v,u} or {obis,name,s}]<br/>profiles [{obis,name,cols,rows[{t,c,e}]}], ret"]:::fw
+    A6["Unscaled fallback: if scaler never read<br/>(3 tries) the raw number is sent without unit"]:::err
+  end
+
+  B1["TCP frame: header + body, HMAC signature<br/>(Diagram 5)"]:::net
+
+  subgraph SERVER["dlms_server"]
+    direction TB
+    C1["reading.js parseReading()<br/>OBIS regex, finite numbers, string lengths,<br/>row time 'YYYY-MM-DD hh:mm:ss' (meter local)"]:::cloud
+    C2[("readings (read_at = received - ageS, ret, verified)<br/>reading_values (obis, name, num, unit, text)")]:::data
+    C3[("profile_columns (latest wins)<br/>profile_rows: row_key t:time or h:hash,<br/>billing open-month row key 'open'")]:::data
+    C4["devices.last_reading_id, last_seen, fw, verified"]:::data
+    D1["meters.js: SUMMARY_OBIS picks serial, V, I, kW, kWh, PF<br/>status by last_seen: online <= 35 min, delayed <= 90, offline"]:::cloud
+    D2["REST: /api/fleet, /api/meters, /devices/:id/latest,<br/>/readings?obis=, /profiles/:obis, /logs"]:::cloud
+  end
+
+  subgraph BROWSER["Browser SPA (public/js)"]
+    direction TB
+    E1["api.js fetch(): JSON, friendly errors,<br/>server clock skew from Date header"]:::data
+    E2["main.js hash router; one refresh timer for the visible view<br/>(30 s); history tabs load only on demand"]:::data
+    E3["obis.js valueMap: OBIS -> tiles<br/>(V/I/PF per phase, kWh, MD, TOD zones, counters)"]:::data
+    E4["Views: home (fleet, activity chart), meters (list),<br/>meter live tabs, meter history (trends, load profile,<br/>billing, events, read cycles, device log)"]:::data
+    E5["Missing value: tile left out or '—'<br/>Offline meter: values greyed (staleClass)<br/>Refresh failing > 2 intervals: banner"]:::err
+  end
+
+  CHK1["Completeness checks that exist:<br/>firmware markers fill outages (max 7 days / 400 rows),<br/>server dedupe, skipped profile count, read_failed / read_stale issues"]:::data
+  CHK2["Not found in code: expected-OBIS checklist per meter,<br/>block-load interval gap detection, unit / range plausibility checks"]:::missing
+
+  A1 --> A2 --> A3 --> A4 --> A5 --> B1 --> C1
+  A4 -.-> A6
+  C1 --> C2
+  C1 --> C3
+  C1 --> C4
+  C2 --> D1
+  C4 --> D1
+  C2 --> D2
+  C3 --> D2
+  D1 --> D2
+  D2 --> E1 --> E2 --> E3 --> E4
+  E4 -.-> E5
+  C3 -.-> CHK1
+  D2 -.-> CHK2

@@ -1,0 +1,87 @@
+%% Diagram 10 - Fault handling and recovery (what the code actually does)
+%% firmware.ino readDLMSPacket L310-378, com_readAllObjects L1530-1614,
+%% meter_password.ino mpw_search L291-319, modem.ino modem_ensure L342-383,
+%% log_bridge.ino lb_upload L225-296, reading_upload.ino rd_end L413-465,
+%% ota_client.ino ota_run L293-359, http_lite.ino http_fill L274-289
+flowchart LR
+  classDef fw fill:#dbeafe,stroke:#1d4ed8,color:#0f172a
+  classDef net fill:#dcfce7,stroke:#15803d,color:#0f172a
+  classDef cloud fill:#ffedd5,stroke:#c2410c,color:#0f172a
+  classDef data fill:#ede9fe,stroke:#6d28d9,color:#0f172a
+  classDef ota fill:#ccfbf1,stroke:#0f766e,color:#0f172a
+  classDef err fill:#fee2e2,stroke:#b91c1c,color:#0f172a
+  classDef missing fill:#f8fafc,stroke:#94a3b8,stroke-dasharray:5 4,color:#475569
+  classDef term fill:#1e293b,stroke:#1e293b,color:#ffffff
+
+  subgraph MET["Meter side"]
+    direction TB
+    M1["Meter timeout: no 0x7E within 10 s"]:::err
+    M2["Resend same frame, up to RESEND_COUNT = 3<br/>hard deadline 50 s per exchange"]:::fw
+    M3["SEND_FAILED / RECEIVE_FAILED = link error"]:::err
+    M4["Abort the cycle (values / profiles stop),<br/>open profile dropped (rd_profileCancel)"]:::fw
+    M5["UART short write: trace only, no retry"]:::err
+    M6["Association refused: retry x3 (DISC, 1.5 s),<br/>then mpw_search over password list<br/>(max once per 6 h unless forced)"]:::fw
+    M7["Invalid / empty reply for one object:<br/>'(error n)' / '(empty reply)', next object"]:::fw
+    M8["Scaler read failed: retried next cycles,<br/>max 3 tries, then value sent unscaled"]:::err
+    M9["Cycle result ret != 0 still queued and uploaded;<br/>sched_done(ok=false): daily load retried next cycle"]:::data
+  end
+
+  subgraph NETW["Modem and network"]
+    direction TB
+    N1["modem_ensure() before each upload / OTA"]:::net
+    N2{"AT answers (3 tries)?"}
+    N3["modem_init(): AT x10, APN auto / fixed,<br/>attach wait 60 s, PDP activate"]:::net
+    N4["PWRKEY pulse (max 2), wait boot 20 s"]:::net
+    N5["Modem answers, network not ready:<br/>readings stay queued, no reboot"]:::err
+    N6{"Modem silent > 2 h?"}
+    N7(["ESP.restart()"]):::term
+    N8["TCP open: wait +QIOPEN 30 s,<br/>one retry only when the URC is missing"]:::net
+    N9["Send fail / no reply in 15 s / connection closed:<br/>upload stops, modemReady = false"]:::err
+  end
+
+  subgraph BUF["Buffers and server replies"]
+    direction TB
+    B1["READING queue full (48):<br/>oldest dropped and counted,<br/>markers rolled back to NVS (rows re-read)"]:::err
+    B2["Out of memory in rd_end / pg_collect / av_parse:<br/>reading or rows not queued (logged)"]:::err
+    B3["Trace ring full: oldest text dropped,<br/>'dropped' count sent with the next LOG"]:::err
+    B4["Server bad_signature / invalid reading:<br/>rd_reject (values lost, profile rows re-read)"]:::err
+    B5["Server framing error / store_failed:<br/>item kept and resent; server dedupes by boot+seq"]:::data
+  end
+
+  subgraph OTAE["OTA"]
+    direction TB
+    O1["No key / no IMEI / clock not synced / network error:<br/>retry in 900 s (no key: g_cfg.intervalS)"]:::ota
+    O2["Offer signature or fields invalid: rejected, retry 900 s"]:::ota
+    O3["Download: HTTP idle 30 s, short read, MD5 mismatch,<br/>esp_ota_end / set_boot fail: abort, report, retry 900 s"]:::ota
+    O4["New image boots: report running / failed via pend_ver"]:::ota
+    O5["New image crashes in a loop:<br/>no app rollback confirmation call in code"]:::missing
+  end
+
+  subgraph RST["Unexpected reset"]
+    direction TB
+    R1["Brown-out, panic, WDT, software reset"]:::err
+    R2["Reset reason printed and uploaded with the next LOG"]:::fw
+    R3["RAM queue and trace lost; new boot id;<br/>profile rows re-read from NVS markers;<br/>register values of unsent cycles lost"]:::err
+  end
+
+  U1["Not recovered automatically:<br/>blocking call that never returns (no watchdog),<br/>meter refusing all passwords,<br/>network down while modem answers (by design)"]:::missing
+
+  M1 --> M2 --> M3 --> M4 --> M9
+  M6 --> M9
+  M7 --> M9
+  N1 --> N2
+  N2 -->|"yes"| N8
+  N2 -->|"no"| N3
+  N3 -->|"fails, module silent"| N4 --> N6
+  N3 -->|"fails, module answers"| N5
+  N6 -->|"yes"| N7
+  N6 -->|"no"| N5
+  N8 --> N9
+  N9 --> B5
+  B1 --> B4
+  O3 --> O4
+  O4 -.-> O5
+  R1 --> R2 --> R3
+  N7 --> R1
+  M4 -.-> U1
+  N5 -.-> U1

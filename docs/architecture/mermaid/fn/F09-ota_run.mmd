@@ -1,0 +1,28 @@
+%% ota_run() - firmware/ota_client.ino L293-359
+flowchart TB
+  A(["ota_run()"]):::term --> B["busy = true; checkRequested = false"]:::ota
+  B --> C{"modem_ensure()?"}
+  C -->|"no"| C1["lastResult modem_not_ready; next in 900 s"]:::err --> Z
+  C -->|"yes"| D["if modem was down: ota_reportBootResult()"]:::ota
+  D --> E{"device key present?"}
+  E -->|"no"| E1["wait = reg_run()"]:::ota --> E2{"wait > 0?"}
+  E2 -->|"yes"| E3["next check after max(wait, 60 s)"]:::ota --> Z
+  E2 -->|"no: key saved"| F
+  E -->|"yes"| F["ota_check(offer)"]:::ota
+  F --> G{"check ok?"}
+  G -->|"no"| G1["no key / no IMEI: next in intervalS<br/>else next in 900 s; network error: modemReady = false"]:::err --> Z
+  G -->|"yes"| H{"offer.available?"}
+  H -->|"no"| H1["next in offer interval or g_cfg.intervalS"]:::ota --> Z
+  H -->|"yes"| I["fail = ota_download(offer, detail)"]:::ota
+  I --> J{"fail empty?"}
+  J -->|"yes"| J1["ota_setPending(version); report flashed;<br/>delay 1 s; ESP.restart()"]:::ota
+  J -->|"no"| K["report fail status + detail; next in 900 s"]:::err --> Z
+  Z(["busy = false; return"]):::term
+  classDef fw fill:#dbeafe,stroke:#1d4ed8,color:#0f172a
+  classDef net fill:#dcfce7,stroke:#15803d,color:#0f172a
+  classDef cloud fill:#ffedd5,stroke:#c2410c,color:#0f172a
+  classDef data fill:#ede9fe,stroke:#6d28d9,color:#0f172a
+  classDef ota fill:#ccfbf1,stroke:#0f766e,color:#0f172a
+  classDef err fill:#fee2e2,stroke:#b91c1c,color:#0f172a
+  classDef missing fill:#f8fafc,stroke:#94a3b8,stroke-dasharray:5 4,color:#475569
+  classDef term fill:#1e293b,stroke:#1e293b,color:#ffffff

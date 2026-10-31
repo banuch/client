@@ -1,0 +1,59 @@
+%% Diagram 9 - Hardware / software interface map
+%% Evidence: firmware/firmware.ino L49-67 (meter UART, DTR), config.h L25-39 (modem),
+%% modem.ino L85-94 and L305-327 (PWRKEY), build.bat L17 (board options),
+%% trace_tee.cpp (USB CDC), ble_meter.cpp, reset_reason.cpp.
+%% Physical wiring beyond these constants is NOT verified (no schematic in the repo).
+flowchart LR
+  classDef fw fill:#dbeafe,stroke:#1d4ed8,color:#0f172a
+  classDef net fill:#dcfce7,stroke:#15803d,color:#0f172a
+  classDef cloud fill:#ffedd5,stroke:#c2410c,color:#0f172a
+  classDef data fill:#ede9fe,stroke:#6d28d9,color:#0f172a
+  classDef ota fill:#ccfbf1,stroke:#0f766e,color:#0f172a
+  classDef err fill:#fee2e2,stroke:#b91c1c,color:#0f172a
+  classDef missing fill:#f8fafc,stroke:#94a3b8,stroke-dasharray:5 4,color:#475569
+
+  subgraph MCU["ESP32-S3 (FQBN esp32s3, 16 MB QIO flash, OPI PSRAM)"]
+    direction TB
+    G5["GPIO5 = UART1 RX<br/>MeterSerial RX, 2048 B rx buffer"]:::fw
+    G4["GPIO4 = UART1 TX"]:::fw
+    G6["GPIO6 = DTR output<br/>active LOW (inverted by MAX3232), 100 ms wake"]:::fw
+    G18["GPIO18 = UART2 RX (MODEM_RX_PIN)<br/>4096 B rx buffer"]:::net
+    G17["GPIO17 = UART2 TX (MODEM_TX_PIN)"]:::net
+    G10["GPIO10 = MODEM_WAKE_PIN<br/>drives PWRKEY transistor, HIGH = pressed<br/>800 ms pulse"]:::net
+    USBC["Native USB (HWCDC)<br/>115200 trace out + command input"]:::data
+    RADIO["BLE radio (NimBLE backend)<br/>meter service + NUS command service"]:::data
+    FLASH[("Flash: app3M_fat9M_16MB<br/>ota_0 / ota_1 app slots, NVS, FAT (unused by sketch)<br/>EEPROM emulation 4096 B (unused helpers)")]:::ota
+    PSRAM[("PSRAM: trace ring 256 KB,<br/>READING queue bodies")]:::fw
+    RST["Reset sources: ESP.restart() (OTA, REBOOT,<br/>modem silent 2 h); esp_reset_reason() logged"]:::err
+  end
+
+  subgraph RS232["Meter port"]
+    direction TB
+    MAX["MAX3232 transceiver<br/>(level shift + inversion)"]:::fw
+    MP["Meter RS-232 port<br/>RX/TX on pins 2/3, DTR<br/>9600 8N1 HDLC"]:::fw
+  end
+
+  subgraph MODEM["Quectel EC200U module (pin names Inferred)"]
+    direction TB
+    MRX["EC200U MAIN_RXD"]:::net
+    MTX["EC200U MAIN_TXD"]:::net
+    PK["PWRKEY (via transistor, type not stated)"]:::net
+    SIM["SIM card (ICCID read for APN cache)"]:::net
+    STAT["STATUS / RESET_N pins<br/>not used by firmware"]:::missing
+  end
+
+  PWR["Power supply / brown-out circuit<br/>Not verified (only reset reason text)"]:::missing
+  WDT["External or task watchdog<br/>Not implemented in sketch"]:::missing
+  RS485["RS-485 transceiver<br/>Not implemented"]:::missing
+
+  G4 -->|"TX"| MAX
+  MAX -->|"RX"| G5
+  G6 -->|"DTR"| MAX
+  MAX <-->|"RS-232 levels"| MP
+  G17 -->|"TX 9600"| MRX
+  MTX -->|"RX 9600"| G18
+  G10 -->|"pulse"| PK
+  SIM --- MODEM
+  PWR -.-> MCU
+  PWR -.-> MODEM
+  WDT -.-> RST

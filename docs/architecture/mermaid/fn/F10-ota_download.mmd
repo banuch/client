@@ -1,0 +1,33 @@
+%% ota_download(offer, detail) - firmware/ota_client.ino L185-262; http_lite.ino http_open / http_read
+flowchart TB
+  A(["ota_download()"]):::term --> B{"next update partition exists<br/>and offer.size fits the slot?"}
+  B -->|"no"| X(["return failed"]):::err
+  B -->|"yes"| C["http_open GET /ota/firmware with device_id and token<br/>(Connection: close, chunked rejected)"]:::net
+  C --> D{"opened, HTTP 200,<br/>Content-Length == offer.size?"}
+  D -->|"no"| X
+  D -->|"yes"| E{"esp_ota_begin(part, size)?"}
+  E -->|"no"| X
+  E -->|"yes"| F["MD5 init"]:::ota
+  F --> G["n = http_read(buf, 1024)<br/>(AT+QIRD, idle timeout 30 s)"]:::net
+  G --> H{"n > 0?"}
+  H -->|"yes"| H1{"esp_ota_write OK?"}
+  H1 -->|"yes"| H2["MD5 update; written += n; progress every 5 %"]:::ota --> G
+  H1 -->|"no"| I
+  H -->|"no"| I["http_close(); MD5 finish"]:::net
+  I --> J{"write error or written != size?"}
+  J -->|"yes"| J1["esp_ota_abort()"]:::err --> X
+  J -->|"no"| K{"MD5 == offer.md5?"}
+  K -->|"no"| K1(["esp_ota_abort(); return md5_fail"]):::err
+  K -->|"yes"| L{"esp_ota_end() image validation?"}
+  L -->|"no"| X
+  L -->|"yes"| M{"esp_ota_set_boot_partition()?"}
+  M -->|"no"| X
+  M -->|"yes"| N(["return empty string (success)"]):::term
+  classDef fw fill:#dbeafe,stroke:#1d4ed8,color:#0f172a
+  classDef net fill:#dcfce7,stroke:#15803d,color:#0f172a
+  classDef cloud fill:#ffedd5,stroke:#c2410c,color:#0f172a
+  classDef data fill:#ede9fe,stroke:#6d28d9,color:#0f172a
+  classDef ota fill:#ccfbf1,stroke:#0f766e,color:#0f172a
+  classDef err fill:#fee2e2,stroke:#b91c1c,color:#0f172a
+  classDef missing fill:#f8fafc,stroke:#94a3b8,stroke-dasharray:5 4,color:#475569
+  classDef term fill:#1e293b,stroke:#1e293b,color:#ffffff

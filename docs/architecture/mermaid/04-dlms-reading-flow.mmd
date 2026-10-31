@@ -1,0 +1,89 @@
+%% Diagram 4 - DLMS meter reading sequence for one read cycle
+%% com_readAllObjects(): firmware/firmware.ino L1530-1614
+%% com_initializeConnection(): L550-606, readDLMSPacket(): L310-378
+%% av_read/av_readScalers/av_readValues: L1230-1525
+%% pg_readCycle/pg_readProfile/pg_applyScalers: firmware/profiles.ino L938-1180
+sequenceDiagram
+  autonumber
+  participant L as loop() firmware.ino
+  participant C as com_* / av_* / pg_*<br/>(firmware.ino, profiles.ino)
+  participant G as Gurux DLMS lib<br/>(GXDLMSClient + src/*.c)
+  participant U as UART1 + MAX3232<br/>(9600 8N1, DTR)
+  participant M as DLMS meter
+
+  L->>C: com_readAllObjects("0.0.43.1.0.255", flags)
+  Note over C: Invocation counter read is skipped:<br/>security = NONE (LLS only)
+
+  rect rgb(219,234,254)
+  Note over C,M: Association (up to CONNECT_RETRY = 3 attempts, DISC + 1.5 s between)
+  C->>U: DTR asserted (GPIO6 LOW), wait 100 ms
+  C->>G: SnrmRequest
+  G->>U: HDLC SNRM frame
+  U->>M: SNRM
+  M-->>U: UA (negotiated frame sizes)
+  U-->>G: ParseUAResponse
+  C->>G: AarqRequest (LLS password = active list entry)
+  G->>U: AARQ
+  U->>M: AARQ
+  M-->>U: AARE
+  U-->>G: ParseAAREResponse
+  end
+
+  alt AARE refused (auth failure / rejected)
+    C->>C: mpw_search(): try other passwords once each<br/>(at most every 6 h unless BLE read / METER_PW DETECT)
+  else link error (no reply)
+    C-->>L: SEND_FAILED / RECEIVE_FAILED: cycle aborted
+  end
+  C->>C: mpw_accepted(): save the working password in NVS
+
+  rect rgb(237,233,254)
+  Note over C,M: Association view, first successful cycle after boot only
+  C->>M: GET 0.0.40.0.0.255 attr 2 (object list)
+  M-->>C: object_list (block transfer via ReceiverReady loop)
+  C->>C: av_parse(): keep class, version, OBIS of every object
+  loop each Register / ExtRegister / DemandRegister (scaler not read yet, < 3 tries)
+    C->>M: GET attr 3 (attr 4 for demand register) scaler_unit
+    M-->>C: {scaler, unit}
+  end
+  end
+
+  C->>M: GET clock 0.0.1.0.0.255 attr 2
+  M-->>C: date-time (12 bytes)
+  C->>L: sched_syncClock(meter local seconds)
+
+  opt CYCLE_VALUES or CYCLE_FULL
+    loop every Data / Register / ExtRegister / DemandRegister / Clock in view
+      C->>M: GET attr 2 (value)
+      M-->>C: value (or data-access-result)
+      C->>C: formatValue(): value x 10^scaler, W/Wh/var -> k-units
+      C->>L: rd_addNumber / rd_addText + ble_readingAdd*
+    end
+  end
+
+  opt CYCLE_PROFILES / CYCLE_DAILY / CYCLE_FULL
+    loop each Profile Generic (IC 7) wanted, scaler profiles 1.0.94.91.3..7 skipped
+      C->>M: GET attr 3 capture_objects (columns)
+      C->>M: GET attr 4 capture_period, attr 7 entries_in_use, attr 8 profile_entries
+      Note over C,M: Block Load: values 1.0.99.1.0.255 scaled by<br/>Block Load Scalar Profile 1.0.94.91.4.255
+      C->>M: GET scaler profile attr 3 + attr 2 (one row of {scaler, unit})
+      C->>C: pg_applyScalers(): own register scaler first,<br/>then same-quantity tariff, then scaler profile
+      alt clock column + capture period + meter clock valid
+        C->>M: GET attr 2 with selective access by range (selector 1)<br/>from marker + 1 (or last 24 h / 7 days) to now + period
+        opt range refused or empty with no marker
+          C->>M: GET attr 2 by entry (selector 2), newest N rows
+        end
+      else no range possible
+        C->>M: GET attr 2 plain (<= 400 entries) or by entry (marked profiles)
+      end
+      M-->>C: buffer rows (multi-block, ReceiverReady loop)
+      C->>C: pg_collect(): rows newer than marker,<br/>rebuild empty clock cells from period
+      C->>L: rd_profileBegin / Column / Row* / End, mk_advance(marker)
+    end
+  end
+
+  C-->>L: ret (0 = OK, else DLMS error code)
+  L->>C: com_close()
+  C->>M: HDLC DISC (no AARLRQ: some meters never answer it)
+  M-->>C: UA / DM (or timeout, ignored)
+
+  Note over C,U: Every request: readDLMSPacket(): 10 s per frame, resend up to 3 times,<br/>hard deadline 50 s for the exchange. A link error ends the cycle.

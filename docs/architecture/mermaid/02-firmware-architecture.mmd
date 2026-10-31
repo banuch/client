@@ -1,0 +1,119 @@
+%% Diagram 2 - Firmware internal architecture (firmware/*.ino, *.cpp, *.h)
+%% Arrows = "calls / writes to". Every module is an Arduino .ino tab compiled
+%% into one translation unit, plus the C++/C files listed.
+flowchart TB
+  classDef fw fill:#dbeafe,stroke:#1d4ed8,color:#0f172a
+  classDef net fill:#dcfce7,stroke:#15803d,color:#0f172a
+  classDef cloud fill:#ffedd5,stroke:#c2410c,color:#0f172a
+  classDef data fill:#ede9fe,stroke:#6d28d9,color:#0f172a
+  classDef ota fill:#ccfbf1,stroke:#0f766e,color:#0f172a
+  classDef err fill:#fee2e2,stroke:#b91c1c,color:#0f172a
+  classDef missing fill:#f8fafc,stroke:#94a3b8,stroke-dasharray:5 4,color:#475569
+
+  subgraph ENTRY["Application entry - firmware.ino"]
+    SETUP["setup() L1635<br/>init UARTs, DLMS client, NVS, BLE, modem"]:::fw
+    LOOP["loop() L1728<br/>commands, BLE, schedule, read, upload, OTA"]:::fw
+  end
+
+  subgraph CFG["Configuration"]
+    CONFH["config.h<br/>build-time defaults, pins, limits"]:::fw
+    NVSC["nvs_config.ino<br/>cfg_load / cfg_set (g_cfg)"]:::fw
+    CMD["commands.ino<br/>cmd_handle: STATUS, SET, CHECK_OTA,<br/>METER_PW, RESET_MARKS, REBOOT"]:::fw
+    MPW["meter_password.ino<br/>mpw_*: LLS password list + search"]:::fw
+  end
+
+  subgraph METERSIDE["Meter communication"]
+    SCHED["schedule.ino<br/>sched_due / sched_done / sched_syncClock"]:::fw
+    COM["firmware.ino transport<br/>com_initializeConnection, com_readDataBlock,<br/>readDLMSPacket, com_readSerialPort, com_close"]:::fw
+    AV["firmware.ino association view<br/>av_read, av_readScalers, av_readValues,<br/>formatValue, readAttribute"]:::fw
+    PG["profiles.ino<br/>pg_readCycle, pg_readProfile, pg_applyScalers,<br/>pg_collect, pg_readClock"]:::fw
+    GX["Gurux DLMS client<br/>GXDLMSClient.cpp + src/*.c<br/>HDLC framing, APDU encode/parse"]:::fw
+    UART1["HardwareSerial MeterSerial (UART1)<br/>RX GPIO5, TX GPIO4, DTR GPIO6"]:::fw
+    NAMES["obis_names.h<br/>OBIS_NAMES, EVENT_NAMES"]:::fw
+  end
+
+  subgraph BUFFER["Local buffering"]
+    RD["reading_upload.ino<br/>rd_begin/rd_add*/rd_profile*/rd_end<br/>RAM queue RD_QUEUE_MAX = 48"]:::data
+    MK["reading_upload.ino markers<br/>mk_get / mk_advance / mk_commit<br/>NVS 'pgmark'"]:::data
+    TRACE["trace_tee.cpp TraceLog<br/>USB serial + 256 KB PSRAM ring"]:::data
+  end
+
+  subgraph COMMS["Network transport"]
+    LB["log_bridge.ino<br/>lb_upload: READING + LOG frames, HMAC sig"]:::net
+    HTTP["http_lite.ino<br/>http_open / http_read / http_requestJson"]:::net
+    MDM["modem.ino (EC200U AT driver)<br/>modem_init, modem_ensure, APN auto,<br/>tcpOpen/Send/Read/Close, CCLK clock"]:::net
+    UART2["HardwareSerial Serial2 (UART2)<br/>TX GPIO17, RX GPIO18, PWRKEY GPIO10"]:::net
+  end
+
+  subgraph OTAS["OTA and provisioning"]
+    OTA["ota_client.ino<br/>ota_run, ota_check, ota_download,<br/>ota_report, ota_reportBootResult"]:::ota
+    REG["register.ino<br/>reg_run: P-256 ECDH + AES-256-GCM key unwrap"]:::ota
+    ESPOTA["ESP-IDF esp_ota_* API<br/>inactive slot write + boot switch"]:::ota
+  end
+
+  subgraph BLE["Local interfaces"]
+    BLEM["ble_meter.cpp<br/>GATT meter service: read/get/status/interval/profile"]:::data
+    BLEO["ota_ble.ino<br/>Nordic-UART command service"]:::data
+    USB["USB CDC serial<br/>cmd_pollSerial (commands in)"]:::data
+  end
+
+  subgraph RECOV["Supervision and recovery"]
+    RR["reset_reason.cpp<br/>esp_reset_reason text at boot"]:::err
+    REC["Recovery paths<br/>modem_ensure PWRKEY + ESP.restart after 2 h,<br/>DLMS resend x3, association retry x3"]:::err
+    WDT["Watchdog<br/>no esp_task_wdt / loop WDT code found"]:::missing
+  end
+
+  SETUP --> NVSC
+  SETUP --> MPW
+  SETUP --> BLEM
+  SETUP --> BLEO
+  SETUP --> MDM
+  SETUP --> OTA
+  SETUP --> RR
+  LOOP --> USB --> CMD
+  LOOP --> BLEO --> CMD
+  LOOP --> BLEM
+  LOOP --> SCHED
+  LOOP -->|"com_readAllObjects(flags)"| AV
+  LOOP --> RD
+  LOOP -->|"lb_upload()"| LB
+  LOOP -->|"ota_run() when due"| OTA
+
+  CMD --> NVSC
+  CMD --> MPW
+  CMD --> MK
+  NVSC --> SCHED
+  CONFH -.-> NVSC
+
+  AV --> COM
+  AV --> MPW
+  AV --> PG
+  AV --> SCHED
+  AV -->|"rd_addNumber / rd_addText"| RD
+  AV -->|"ble_readingAdd*"| BLEM
+  AV -.-> NAMES
+  PG --> COM
+  PG -->|"rd_profile*"| RD
+  PG --> MK
+  MPW --> COM
+  COM --> GX
+  COM --> UART1
+
+  RD --> MK
+  LB --> RD
+  LB --> TRACE
+  LB --> MDM
+  LB -->|"ota_hmac (device key)"| OTA
+  OTA --> HTTP --> MDM
+  OTA --> REG
+  REG --> HTTP
+  REG --> NVSC
+  OTA --> ESPOTA
+  MDM --> UART2
+  MDM --> REC
+  TRACE -.->|"every TraceSerial print"| LB
+
+  subgraph LEGEND["Legend"]
+    direction LR
+    G1["Firmware / hardware"]:::fw ~~~ G2["Communication"]:::net ~~~ G4["Storage / app interface"]:::data ~~~ G5["OTA"]:::ota ~~~ G6["Error / recovery"]:::err ~~~ G7["Not implemented"]:::missing
+  end

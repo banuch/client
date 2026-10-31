@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AMR Architecture Diagrams</title>
+<style>
+  :root {
+    --bg: #f8fafc; --panel: #ffffff; --text: #0f172a; --muted: #475569; --line: #e2e8f0;
+    --accent: #1d4ed8; --chip: #eef2ff;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0b1220; --panel: #111a2e; --text: #e2e8f0; --muted: #94a3b8; --line: #1e293b;
+      --accent: #93c5fd; --chip: #1e293b;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 15px/1.5 "Segoe UI", Helvetica, Arial, sans-serif; }
+  header, main { max-width: 1200px; margin: 0 auto; padding: 0 16px; }
+  header { padding-top: 28px; }
+  h1 { font-size: 26px; margin: 0 0 4px; }
+  header p { color: var(--muted); margin: 0 0 12px; max-width: 70ch; }
+  nav.docs { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0 8px; }
+  nav.docs a, .chip { background: var(--chip); color: var(--accent); text-decoration: none;
+         padding: 4px 10px; border-radius: 999px; font-size: 13px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 12px; font-size: 13px; color: var(--muted); margin: 8px 0 20px; }
+  .legend span::before { content: ""; display: inline-block; width: 12px; height: 12px;
+         border-radius: 3px; margin-right: 6px; vertical-align: -1px; background: var(--c);
+         border: 1px solid var(--b); }
+  h2 { font-size: 18px; margin: 28px 0 12px; }
+  .filter { display: flex; gap: 8px; margin-bottom: 8px; }
+  .filter input { flex: 1; max-width: 420px; padding: 8px 10px; border-radius: 8px;
+         border: 1px solid var(--line); background: var(--panel); color: var(--text); font: inherit; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 16px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+         overflow: hidden; display: flex; flex-direction: column; }
+  .thumb { display: block; background: #fff; height: 220px; border-bottom: 1px solid var(--line); }
+  .thumb img { width: 100%; height: 100%; object-fit: contain; padding: 8px; }
+  .body { padding: 12px 14px 14px; display: flex; flex-direction: column; gap: 6px; flex: 1; }
+  .body h3 { margin: 0; font-size: 15px; }
+  .body p { margin: 0; color: var(--muted); font-size: 13.5px; }
+  .src { font-family: Consolas, "Courier New", monospace; font-size: 12px; color: var(--muted);
+         word-break: break-word; }
+  .links { display: flex; gap: 10px; font-size: 13px; margin-top: auto; padding-top: 6px; }
+  .links a { color: var(--accent); }
+  footer { max-width: 1200px; margin: 32px auto; padding: 0 16px; color: var(--muted); font-size: 13px; }
+  @media (max-width: 420px) { .grid { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>AMR system architecture</h1>
+  <p>ESP32-S3 DLMS meter reader with EC200U 4G modem, <code>dlms_server</code> data service and
+     <code>ota_server</code> update service. Every diagram is traced to source files; see the
+     notes in each card for inferred or unverified parts.</p>
+  <nav class="docs">
+    <a href="README.md">README &amp; manifest</a>
+    <a href="system-architecture.md">System architecture</a>
+    <a href="firmware-program-flow.md">Firmware program flow</a>
+    <a href="backend-analysis.md">Backend analysis</a>
+    <a href="source-code-analysis.md">Source code inventory</a>
+    <a href="architecture-improvements.md">Improvements (19 findings)</a>
+  </nav>
+  <div class="legend">
+    <span style="--c:#dbeafe;--b:#1d4ed8">Firmware / hardware</span>
+    <span style="--c:#dcfce7;--b:#15803d">Communication</span>
+    <span style="--c:#ffedd5;--b:#c2410c">Cloud / backend</span>
+    <span style="--c:#ede9fe;--b:#6d28d9">Database / application</span>
+    <span style="--c:#ccfbf1;--b:#0f766e">OTA</span>
+    <span style="--c:#fee2e2;--b:#b91c1c">Errors / recovery</span>
+    <span style="--c:#f8fafc;--b:#94a3b8">Not implemented / not verified</span>
+  </div>
+  <div class="filter"><input id="q" type="search" placeholder="Filter by title, function or file" aria-label="Filter diagrams"></div>
+</header>
+<main>
+  <h2>System diagrams</h2>
+  <div class="grid" id="sys"></div>
+  <h2>Function-level flowcharts</h2>
+  <div class="grid" id="fn"></div>
+</main>
+<footer>Generated from commit 7fef5c5 with Mermaid CLI. Sources in <code>mermaid/</code>; re-render with <code>render-diagrams.sh</code>.</footer>
+<script>
+const SYS = [
+  ["01-system-architecture", "1. Complete system architecture", "Meter, ESP32-S3, EC200U, LTE, dlms_server, ota_server, SQLite and dashboards with the real data paths and ports.", "README.md, config.h, log_bridge.ino, ota_client.ino, dlms_server/src, ota_server/src, deploy/"],
+  ["02-firmware-architecture", "2. Firmware internal architecture", "Modules of the Arduino sketch and their call dependencies. Watchdog shown as not implemented.", "firmware/*.ino, *.cpp, config.h"],
+  ["03-firmware-program-flow", "3. Firmware program flow", "Power-on, setup(), modem init, then the loop(): schedule, read cycle, upload, OTA.", "firmware.ino L1635-1796, modem.ino L85-146"],
+  ["04-dlms-reading-flow", "4. DLMS meter reading sequence", "SNRM/AARQ association, password search, object list, scalers, values, profile generics with range/entry selective access, DISC.", "firmware.ino L310-1614, profiles.ino L196-1180"],
+  ["05-tcp-sequence", "5. TCP upload sequence", "Device push of READING and LOG frames, server validation, storage and per-message acknowledgement.", "log_bridge.ino, modem.ino, tcp-server.js, framing.js, db.js"],
+  ["06-ota-flow", "6. OTA firmware update", "Registration, signed check, single-use token download, MD5 + image validation, reboot and boot report. Rollback not implemented.", "ota_client.ino, register.ino, routes/device.js"],
+  ["07-backend-architecture", "7. Backend and database", "Both Node services, their modules, tables, systemd deployment and monitoring gaps.", "dlms_server/src, ota_server/src, deploy/"],
+  ["08-dashboard-data-flow", "8. Dashboard data flow", "Raw APDU to scaled JSON, storage, REST, SPA widgets; completeness checks present and missing.", "firmware.ino formatValue, reading.js, db.js, meters.js, public/js"],
+  ["09-hardware-interface", "9. Hardware / software interface", "GPIO and UART mapping for meter port, DTR, modem and PWRKEY. Wiring beyond code constants is unverified.", "firmware.ino L49-67, config.h L25-34, modem.ino, build.bat"],
+  ["10-error-recovery", "10. Error handling and recovery", "Meter, modem, network, buffer, OTA and reset faults with actual retries and unrecovered cases.", "firmware.ino, modem.ino, log_bridge.ino, reading_upload.ino, ota_client.ino"],
+];
+const FN = [
+  ["F01-setup", "setup()", "Boot initialisation.", "firmware.ino:1635"],
+  ["F02-loop", "loop() + sched_due()", "Main cycle and scheduling decision.", "firmware.ino:1728, schedule.ino:87"],
+  ["F03-com_readAllObjects", "com_readAllObjects()", "One meter session with retries and password search.", "firmware.ino:1530"],
+  ["F04-readDLMSPacket", "readDLMSPacket() / com_readDataBlock()", "Frame exchange, resend and block transfer.", "firmware.ino:310, :380"],
+  ["F05-pg_readProfile", "pg_readProfile()", "Profile generic read strategy (range, entry, plain).", "profiles.ino:938"],
+  ["F06-pg_collect", "pg_collect()", "Row selection and marker advance.", "profiles.ino:746"],
+  ["F07-lb_upload", "lb_upload()", "Push readings and trace, handle replies.", "log_bridge.ino:225"],
+  ["F08-modem_ensure", "modem_ensure() + APN auto", "Modem health, PWRKEY recovery, restart after 2 h.", "modem.ino:342, :244"],
+  ["F09-ota_run", "ota_run()", "OTA state machine and scheduling.", "ota_client.ino:293"],
+  ["F10-ota_download", "ota_download()", "Stream image to the inactive slot with checks.", "ota_client.ino:185"],
+  ["F11-reg_run", "reg_run()", "Automatic device-key registration.", "register.ino:182"],
+  ["F12-dlms_server_handle", "dlms_server handle() + saveReading()", "Server side of one device message.", "tcp-server.js:31, db.js:210"],
+];
+const esc = (s) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+function card([id, title, desc, src], svgDir, pngDir) {
+  const svg = `${svgDir}/${id}.svg`, png = `${pngDir}/${id}.png`;
+  const src_ = `mermaid/${svgDir === "function-flows" ? "fn/" : ""}${id}.mmd`;
+  return `<article class="card" data-k="${esc((title + " " + desc + " " + src).toLowerCase())}">
+    <a class="thumb" href="${svg}" target="_blank" rel="noopener"><img src="${png}" alt="${esc(title)}" loading="lazy"></a>
+    <div class="body"><h3>${esc(title)}</h3><p>${esc(desc)}</p><div class="src">${esc(src)}</div>
+    <div class="links"><a href="${svg}" target="_blank" rel="noopener">SVG</a><a href="${png}" target="_blank" rel="noopener">PNG</a><a href="${src_}">Mermaid source</a></div></div></article>`;
+}
+document.getElementById("sys").innerHTML = SYS.map((d) => card(d, "diagrams", "png")).join("");
+document.getElementById("fn").innerHTML = FN.map((d) => card(d, "function-flows", "function-flows")).join("");
+document.getElementById("q").addEventListener("input", (e) => {
+  const q = e.target.value.trim().toLowerCase();
+  for (const c of document.querySelectorAll(".card")) c.hidden = q !== "" && !c.dataset.k.includes(q);
+});
+</script>
+</body>
+</html>

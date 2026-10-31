@@ -1,0 +1,78 @@
+%% Diagram 7 - Backend and database architecture
+%% dlms_server/src/*.js, ota_server/src/**/*.js, shared/device-key.js, deploy/*
+flowchart LR
+  classDef fw fill:#dbeafe,stroke:#1d4ed8,color:#0f172a
+  classDef net fill:#dcfce7,stroke:#15803d,color:#0f172a
+  classDef cloud fill:#ffedd5,stroke:#c2410c,color:#0f172a
+  classDef data fill:#ede9fe,stroke:#6d28d9,color:#0f172a
+  classDef ota fill:#ccfbf1,stroke:#0f766e,color:#0f172a
+  classDef err fill:#fee2e2,stroke:#b91c1c,color:#0f172a
+  classDef missing fill:#f8fafc,stroke:#94a3b8,stroke-dasharray:5 4,color:#475569
+
+  DEV["ESP32 devices<br/>(via EC200U / LTE)"]:::fw
+  BR1["Operator browser"]:::data
+  BR2["Admin browser"]:::data
+
+  subgraph SYSD["systemd (deploy/amr-dlms.service, amr-ota.service): Restart=always, journald logs"]
+    direction LR
+    subgraph DLMS["dlms_server - Node 18+, Express 4, better-sqlite3"]
+      direction TB
+      SV["server.js start()<br/>loadConfig/.env, assertConfig,<br/>retention prune timer (hourly, RETENTION_DAYS)"]:::cloud
+      TS["tcp-server.js :7001<br/>net.Server, per-socket FrameParser,<br/>idle 120 s, maxConnections 200"]:::cloud
+      FR["framing.js<br/>JSON header line + bytes body,<br/>validateHeader, size limits"]:::cloud
+      VF["verify.js checkMessage<br/>HMAC surface type|id|boot|seq|sha256(body)"]:::cloud
+      RP["reading.js parseReading<br/>values / profiles validation, skipped list"]:::cloud
+      DB1["db.js (WAL, foreign keys)<br/>saveReading, saveLog, queries, prune, migrate"]:::cloud
+      LS["log-store.js<br/>append / tail / prune per day"]:::cloud
+      HS["http-server.js :7002<br/>CSP headers, login (in-memory sessions,<br/>Basic for scripts, lockout), X-AMR-Data CSRF header"]:::cloud
+      MT["meters.js<br/>status online/delayed/offline, issues,<br/>fleet counts, by firmware"]:::cloud
+      PUB["public/ SPA (ES modules)<br/>+ /vendor/chart.js"]:::data
+    end
+    subgraph OTAS["ota_server - Node 18+, Express 4, better-sqlite3, multer"]
+      direction TB
+      OSV["server.js / app.js<br/>request log (token stripped), 15 min socket timeout"]:::ota
+      DR["routes/device.js /ota/*<br/>register, check, firmware, report"]:::ota
+      HM["hmac.js verifyRequest + ReplayGuard<br/>ts window 300 s"]:::ota
+      RS["resolver.js resolveTarget<br/>pin or newer channel release"]:::ota
+      RK["regkey.js P-256 server key,<br/>wrapDeviceKey AES-256-GCM"]:::ota
+      AU["auth.js scrypt passwords,<br/>DB sessions, roles admin/viewer, CSRF header"]:::ota
+      AR["routes/admin.js /api/*<br/>stats, releases (ESP magic 0xE9 check, MD5),<br/>channels, devices, approve/reject, events"]:::ota
+      UR["routes/auth.js, routes/users.js"]:::ota
+      OPUB["public/ dashboard (app.js)"]:::data
+    end
+    SH["shared/device-key.js<br/>deviceKey, sign, safeEqualHex"]:::cloud
+  end
+
+  subgraph STORE["Storage on the VM (DATA_DIR)"]
+    direction TB
+    SQ1[("amr-data.db<br/>devices, readings, reading_values,<br/>log_uploads, profile_columns, profile_rows")]:::data
+    LOGF[("logs/{deviceId}/{YYYY-MM-DD}.log")]:::data
+    SQ2[("ota.db<br/>releases, channels, devices, tokens,<br/>events, users, sessions")]:::data
+    BIN[("firmware/fw_{version}.bin<br/>server_reg_key.pem (0600)")]:::data
+  end
+
+  MON["Monitoring: /api/health and /health only;<br/>no metrics, alerting or queue workers"]:::missing
+
+  DEV -->|"TCP frames"| TS --> FR --> VF --> RP --> DB1 --> SQ1
+  TS --> LS --> LOGF
+  VF -.-> SH
+  SV --> TS
+  SV --> HS
+  SV -.->|"prune"| DB1
+  BR1 --> HS --> MT --> DB1
+  HS --> LS
+  HS --> PUB
+
+  DEV -->|"HTTP /ota/*"| OSV --> DR
+  DR --> HM -.-> SH
+  DR --> RS
+  DR --> RK --> BIN
+  DR --> SQ2
+  DR -->|"stream .bin"| BIN
+  BR2 --> OSV --> AU --> SQ2
+  OSV --> AR --> SQ2
+  AR --> BIN
+  OSV --> UR --> SQ2
+  OSV --> OPUB
+  MON -.-> HS
+  MON -.-> OSV

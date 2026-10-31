@@ -1,0 +1,30 @@
+%% setup() - firmware/firmware.ino L1635-1726
+flowchart TB
+  A(["setup()"]):::term --> B["TraceLog.setTxBufferSize(4096), begin(115200)<br/>wait at most 3 s for USB"]:::fw
+  B --> C["EEPROM.begin(4096); DTR pin output, de-asserted"]:::fw
+  C --> D["frameData capacity 128; serverAddress = 1<br/>(physical address not used)"]:::fw
+  D --> E["Client.init(LN, 32, server, LLS, empty pw, HDLC)<br/>SetHDLCSettings(1024, 1024, 1, 1)"]:::fw
+  E --> F{"Interface HDLC_WITH_MODE_E?"}
+  F -->|"yes (not configured)"| F1["meter_begin(300, 7E1)"]:::fw
+  F -->|"no"| F2["meter_begin(9600, 8N1)"]:::fw
+  F1 --> G
+  F2 --> G["cfg_load(); mpw_begin()"]:::fw
+  G --> H["ble_begin(); ble_setSettings(); otaBle_init(); ble_startAdvertising()"]:::data
+  H --> I["print FW_VERSION, running partition, resetReasonText()"]:::err
+  I --> J["modem_hwInit()"]:::net
+  J --> K{"modem_init() OK?"}
+  K -->|"yes"| K1["modemReady = true<br/>ota_reportBootResult()"]:::ota
+  K -->|"no"| K2["modemReady = false"]:::err
+  K1 --> L
+  K2 --> L["lb_begin(): boot id = esp_random(), never 0"]:::data
+  L --> M["mk_checkEpoch(): reset block/daily markers once per PG_MARK_EPOCH"]:::data
+  M --> N["g_ota.nextCheckMs = millis() + 5000"]:::ota
+  N --> O(["return to Arduino core, then loop()"]):::term
+  classDef fw fill:#dbeafe,stroke:#1d4ed8,color:#0f172a
+  classDef net fill:#dcfce7,stroke:#15803d,color:#0f172a
+  classDef cloud fill:#ffedd5,stroke:#c2410c,color:#0f172a
+  classDef data fill:#ede9fe,stroke:#6d28d9,color:#0f172a
+  classDef ota fill:#ccfbf1,stroke:#0f766e,color:#0f172a
+  classDef err fill:#fee2e2,stroke:#b91c1c,color:#0f172a
+  classDef missing fill:#f8fafc,stroke:#94a3b8,stroke-dasharray:5 4,color:#475569
+  classDef term fill:#1e293b,stroke:#1e293b,color:#ffffff

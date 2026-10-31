@@ -1,0 +1,44 @@
+%% com_readAllObjects(ic, flags) - firmware/firmware.ino L1530-1614
+%% params: invocation counter OBIS (no effect while security is NONE), flags CYCLE_*
+%% returns: 0 or a DLMS error code
+flowchart TB
+  A(["com_readAllObjects(ic, flags)"]):::term --> B{"ic != NULL?"}
+  B -->|"yes"| B1["com_updateInvocationCounter()<br/>no-op when security == NONE"]:::fw --> B2{"ret != 0?"}
+  B2 -->|"yes"| X(["return ret"]):::term
+  B2 -->|"no"| C
+  B -->|"no"| C["attempt = 1"]:::fw
+  C --> D["ret = com_initializeConnection()<br/>DTR, SNRM/UA, AARQ/AARE"]:::fw
+  D --> E{"ret == OK?"}
+  E -->|"no, attempt below 3"| E1["com_close(); delay 1500 ms; attempt++"]:::err --> D
+  E -->|"no, attempt == 3"| F{"mpw_isRejected(ret)?"}
+  E -->|"yes"| H
+  F -->|"yes"| G{"mpw_searchAllowed()?"}
+  G -->|"yes"| G1["ret = mpw_search()"]:::fw --> G2
+  G -->|"no"| G3["log association refused"]:::err --> G2
+  F -->|"no"| G2{"ret != OK?"}
+  G2 -->|"yes"| X
+  G2 -->|"no"| H["mpw_accepted()"]:::fw
+  H --> I{"g_avLoaded?"}
+  I -->|"no"| I1["av_read() (object list)"]:::fw --> I2{"ret != 0?"}
+  I2 -->|"yes"| X
+  I2 -->|"no"| I3["av_readScalers(); av_print(); g_avLoaded = true"]:::fw --> J
+  I -->|"yes"| I4["ret = av_readScalers()"]:::fw --> I5{"ret != 0?"}
+  I5 -->|"yes"| X
+  I5 -->|"no"| J["pg_readClock(now, valid)"]:::fw
+  J --> K{"link error?"}
+  K -->|"yes"| X
+  K -->|"no"| L{"valid and pg_clockSeconds()?"}
+  L -->|"yes"| L1["sched_syncClock(nowS)"]:::fw --> M
+  L -->|"no"| M{"flags has VALUES or FULL?"}
+  M -->|"yes"| M1["ret = av_readValues()"]:::fw --> N
+  M -->|"no"| N{"flags has PROFILES, DAILY or FULL<br/>and no link error?"}
+  N -->|"yes"| N1["ret = pg_readCycle(flags, now, valid)"]:::fw --> X
+  N -->|"no"| X
+  classDef fw fill:#dbeafe,stroke:#1d4ed8,color:#0f172a
+  classDef net fill:#dcfce7,stroke:#15803d,color:#0f172a
+  classDef cloud fill:#ffedd5,stroke:#c2410c,color:#0f172a
+  classDef data fill:#ede9fe,stroke:#6d28d9,color:#0f172a
+  classDef ota fill:#ccfbf1,stroke:#0f766e,color:#0f172a
+  classDef err fill:#fee2e2,stroke:#b91c1c,color:#0f172a
+  classDef missing fill:#f8fafc,stroke:#94a3b8,stroke-dasharray:5 4,color:#475569
+  classDef term fill:#1e293b,stroke:#1e293b,color:#ffffff

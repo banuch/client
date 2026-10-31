@@ -1,0 +1,36 @@
+%% pg_readProfile(p, kind, now, nowValid, full) - firmware/profiles.ino L938-1121
+%% returns only link errors (0 otherwise); rows are queued through pg_readBuffer -> pg_collect
+flowchart TB
+  A(["pg_readProfile()"]):::term --> B["pg_readColumns(): attr 3 capture objects"]:::fw
+  B --> B1{"error?"}
+  B1 -->|"link error"| X1(["return link error"]):::err
+  B1 -->|"other"| X0(["return 0 (profile skipped)"]):::term
+  B1 -->|"ok"| C["read attr 4 period, 7 entries in use, 8 max entries"]:::fw
+  C --> D["pg_applyScalers(): AV register scaler, same-quantity tariff,<br/>then scaler profile 1.0.94.91.x attr 3 + 2"]:::fw
+  D --> D1{"link error?"}
+  D1 -->|"yes"| X1
+  D1 -->|"no"| E["mark = mk_get(key) for block, daily, billing, event<br/>mark later than meter clock + 1 day: reset to 0"]:::data
+  E --> F{"period > 0, clock column,<br/>meter clock valid?"}
+  F -->|"yes: byRange"| G["from = mark + 1, else now - window (24 h / 7 periods)<br/>after marker epoch reset: 45 days; cap 7 days / 400 periods<br/>to = now + period"]:::fw
+  G --> G1{"kind already switched to by-entry?"}
+  G1 -->|"yes"| H
+  G1 -->|"no"| G2["access = range selector 1"]:::fw --> H
+  F -->|"no"| F1{"entries in use > 400?"}
+  F1 -->|"yes, no marker"| X0
+  F1 -->|"yes, marked"| F2["entries = rows since mark (or 24 h) + 2"]:::fw --> H
+  F1 -->|"no"| H["clamp entries to 400 and to entries in use"]:::fw
+  H --> I{"byRange?"}
+  I -->|"no, entries > 0"| I1["access = entry selector 2: newest entries"]:::fw --> J
+  I -->|"no, entries == 0"| J0["plain read (no selective access)"]:::fw --> J
+  I -->|"yes"| J["pg_readBuffer(): GET attr 2, print, pg_collect()"]:::fw
+  J --> K{"range refused, or 0 rows with no marker?"}
+  K -->|"yes"| K1["retry by entry; success: use by-entry<br/>for this profile kind until reboot"]:::err --> L
+  K -->|"no"| L(["return link error or 0"]):::term
+  classDef fw fill:#dbeafe,stroke:#1d4ed8,color:#0f172a
+  classDef net fill:#dcfce7,stroke:#15803d,color:#0f172a
+  classDef cloud fill:#ffedd5,stroke:#c2410c,color:#0f172a
+  classDef data fill:#ede9fe,stroke:#6d28d9,color:#0f172a
+  classDef ota fill:#ccfbf1,stroke:#0f766e,color:#0f172a
+  classDef err fill:#fee2e2,stroke:#b91c1c,color:#0f172a
+  classDef missing fill:#f8fafc,stroke:#94a3b8,stroke-dasharray:5 4,color:#475569
+  classDef term fill:#1e293b,stroke:#1e293b,color:#ffffff
