@@ -14,7 +14,7 @@
 #include "trace_tee.h"
 
 // ── Firmware identity ───────────────────────────────────────────────────────
-#define FW_VERSION "2.0.12" // MAJOR.MINOR.PATCH -- bump before each release
+#define FW_VERSION "2.0.13" // MAJOR.MINOR.PATCH -- bump before each release
 
 // ── Debug output ────────────────────────────────────────────────────────────
 // OTA results go through the trace tee, so they also reach the data server.
@@ -144,6 +144,7 @@
 // the newest row that went into a reading. Saved to NVS once that reading
 // got SEND OK.
 #define PG_MARK_MAX 12
+typedef char PgMarkKey[16];   // "m<a>_<b>_<c>_<d>_<e>" (pg_markKey)
 struct PgMark
 {
     char key[16];
